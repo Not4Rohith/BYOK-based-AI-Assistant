@@ -1,0 +1,319 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Bot, User, ArrowLeft, Send, Info, X, Database, Cpu, Wrench } from 'lucide-react';
+import { ChatMessage, ChatSession } from '@ai-task-manager/shared-types';
+import { FormattedMarkdown } from './FormattedMarkdown';
+import { api } from '../api/client';
+
+interface FullScreenChatProps {
+  onBack: () => void;
+  messages: ChatMessage[];
+  sessions: ChatSession[];
+  onSendMessage: (text: string, sessionId?: string) => void;
+}
+
+export const FullScreenChat: React.FC<FullScreenChatProps> = ({
+  onBack,
+  messages,
+  sessions,
+  onSendMessage
+}) => {
+  const [prompt, setPrompt] = useState('');
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('');
+  const [sessionMessages, setSessionMessages] = useState<ChatMessage[]>(messages);
+  
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const isAutoScrollEnabled = useRef<boolean>(true);
+  const userJustSentRef = useRef<boolean>(false);
+
+  const [detailModalMsg, setDetailModalMsg] = useState<ChatMessage | null>(null);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      setSessionMessages(messages);
+    } else {
+      api.getSessionMessages(selectedSessionId).then((data) => {
+        if (data) setSessionMessages(data);
+      });
+    }
+  }, [messages, selectedSessionId]);
+
+  // Handle smart auto-scroll without snapping when user is reading past history
+  useEffect(() => {
+    if (userJustSentRef.current || isAutoScrollEnabled.current) {
+      if (bottomRef.current) {
+        bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+      userJustSentRef.current = false;
+    }
+  }, [sessionMessages]);
+
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    // User is considered at bottom if within 100px of container bottom
+    const isAtBottom = scrollHeight - scrollTop <= clientHeight + 100;
+    isAutoScrollEnabled.current = isAtBottom;
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prompt.trim()) return;
+    userJustSentRef.current = true;
+    isAutoScrollEnabled.current = true;
+    onSendMessage(prompt.trim(), selectedSessionId || undefined);
+    setPrompt('');
+  };
+
+  const formatTime = (isoString?: string) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div className="flex h-full w-full bg-[#1E1E1E]">
+      {/* Left Sidebar - Chat Sessions History */}
+      <div className="w-64 bg-[#141414] border-r border-white/5 flex flex-col hidden md:flex">
+        <div className="p-4 border-b border-white/5 flex items-center space-x-2 text-[#e3e3e3]">
+          <Bot className="w-5 h-5 text-blue-400" />
+          <h2 className="font-semibold text-sm">AI Chat Sessions</h2>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {sessions.length === 0 ? (
+            <div className="text-xs text-slate-500 p-3 text-center italic">No saved sessions yet</div>
+          ) : (
+            sessions.map((session) => (
+              <button
+                key={session._id}
+                onClick={() => {
+                  userJustSentRef.current = true;
+                  setSelectedSessionId(session._id);
+                }}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                  (selectedSessionId === session._id || (!selectedSessionId && sessions[0]?._id === session._id))
+                    ? 'bg-[#2A2B32] text-white border border-blue-500/30'
+                    : 'text-[#a1a1aa] hover:bg-[#202020]'
+                }`}
+              >
+                <div className="truncate font-medium">{session.title}</div>
+                {session.date && <div className="text-[10px] text-slate-500 mt-0.5">{session.date}</div>}
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col h-full bg-[#1E1E1E]">
+        {/* Top Header */}
+        <div className="h-14 border-b border-white/5 flex items-center justify-between px-4">
+          <button 
+            onClick={onBack}
+            className="flex items-center space-x-2 text-slate-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm font-medium">Back to Tasks</span>
+          </button>
+        </div>
+
+        {/* Chat Messages Body */}
+        <div 
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto p-4 md:p-8"
+        >
+            <div className="max-w-3xl mx-auto space-y-6">
+              {sessionMessages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center space-y-4 pt-20">
+                  <div className="w-16 h-16 bg-[#2A2B32] rounded-2xl flex items-center justify-center shadow-lg">
+                    <Bot className="w-8 h-8 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-white">How can I help you today?</h3>
+                    <p className="text-slate-400 text-sm mt-2 max-w-md">
+                      I can help you organize tasks, replan your day, summarize context, and retrieve memory.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                sessionMessages.map((msg, idx) => (
+                  <div key={msg._id || idx} className="flex items-start space-x-4 group">
+                    {msg.role === 'assistant' || msg.role === 'system' ? (
+                      <div className="w-8 h-8 rounded-full bg-blue-600 flex flex-shrink-0 items-center justify-center shadow">
+                        <Bot className="w-5 h-5 text-white" />
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-purple-600 flex flex-shrink-0 items-center justify-center shadow">
+                        <User className="w-5 h-5 text-white" />
+                      </div>
+                    )}
+                    <div className="flex-1 overflow-hidden min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-semibold text-slate-200">
+                            {msg.role === 'assistant' ? 'AI Assistant' : msg.role === 'system' ? 'System' : 'You'}
+                          </span>
+                          {msg.createdAt && (
+                            <span className="text-xs text-slate-500 font-medium">
+                              {formatTime(msg.createdAt)}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Database Message Details Trigger */}
+                        <button
+                          onClick={() => setDetailModalMsg(msg)}
+                          title="View Database Message Metrics & Token Details"
+                          className="text-slate-500 hover:text-blue-400 opacity-80 hover:opacity-100 transition-opacity p-1"
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="prose prose-invert prose-sm max-w-none text-[#D4D4D8] leading-relaxed break-words">
+                        <FormattedMarkdown content={msg.content} />
+                      </div>
+
+                      {/* Display tool execution tags directly under message if present */}
+                      {msg.toolCalls && msg.toolCalls.length > 0 && (
+                        <div className="mt-2.5 flex flex-wrap gap-1.5">
+                          {msg.toolCalls.map((tc, tIdx) => (
+                            <span
+                              key={tIdx}
+                              className="inline-flex items-center space-x-1 text-[11px] px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                            >
+                              <Wrench className="w-3 h-3" />
+                              <span>{tc.tool}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={bottomRef} />
+            </div>
+          </div>
+
+        {/* Input Area */}
+        <div className="p-4 md:p-6 bg-[#1E1E1E]">
+          <div className="max-w-3xl mx-auto">
+            <form onSubmit={handleSubmit} className="relative flex items-center">
+              <input
+                type="text"
+                className="w-full bg-[#2A2B32] text-white border border-white/10 rounded-xl pl-4 pr-12 py-3.5 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 placeholder:text-slate-500 shadow-inner"
+                placeholder="Message AI Assistant..."
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+              />
+              <button
+                type="submit"
+                disabled={!prompt.trim()}
+                className="absolute right-2 p-2 rounded-lg bg-blue-600 text-white disabled:opacity-50 disabled:bg-transparent disabled:text-slate-500 hover:bg-blue-500 transition-colors"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+            <div className="text-center mt-2 text-[11px] text-slate-500">
+              AI can make mistakes. Consider verifying important information.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Database Message Details Modal */}
+      {detailModalMsg && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#242424] border border-white/10 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center space-x-2 text-blue-400">
+                <Database className="w-5 h-5" />
+                <h3 className="font-bold text-sm text-white">Database Message Details</h3>
+              </div>
+              <button
+                onClick={() => setDetailModalMsg(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between p-2.5 bg-[#1b1b1b] rounded-xl border border-white/5">
+                <span className="text-slate-400 font-medium">Message ID</span>
+                <span className="text-slate-200 font-mono text-[11px] select-all">{detailModalMsg._id}</span>
+              </div>
+
+              <div className="flex items-center justify-between p-2.5 bg-[#1b1b1b] rounded-xl border border-white/5">
+                <span className="text-slate-400 font-medium flex items-center space-x-1.5">
+                  <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Model Engine</span>
+                </span>
+                <span className="text-indigo-300 font-semibold">{detailModalMsg.metadata?.model || 'OpenRouter LLM'}</span>
+              </div>
+
+              {/* Token Usage Section */}
+              <div className="p-3 bg-[#1b1b1b] rounded-xl border border-white/5 space-y-2">
+                <div className="text-xs font-bold text-blue-400 flex items-center justify-between">
+                  <span>TOKEN USAGE</span>
+                  <span className="text-slate-200 font-mono font-bold">
+                    {detailModalMsg.metadata?.tokenUsage?.totalTokens ?? 'N/A'} total
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-white/5">
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>Prompt Tokens:</span>
+                    <span className="text-slate-200 font-mono">
+                      {detailModalMsg.metadata?.tokenUsage?.promptTokens ?? 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>Completion Tokens:</span>
+                    <span className="text-slate-200 font-mono">
+                      {detailModalMsg.metadata?.tokenUsage?.completionTokens ?? 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Executed Tools Section */}
+              {detailModalMsg.toolCalls && detailModalMsg.toolCalls.length > 0 && (
+                <div className="p-3 bg-[#1b1b1b] rounded-xl border border-white/5 space-y-2">
+                  <div className="text-xs font-bold text-amber-400 flex items-center space-x-1">
+                    <Wrench className="w-3.5 h-3.5" />
+                    <span>EXECUTED TOOL CALLS ({detailModalMsg.toolCalls.length})</span>
+                  </div>
+                  <div className="space-y-1.5 pt-1 border-t border-white/5 max-h-36 overflow-y-auto">
+                    {detailModalMsg.toolCalls.map((tc, idx) => (
+                      <div key={idx} className="p-2 bg-[#242424] rounded-lg text-[11px] space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-blue-300">{tc.tool}</span>
+                          <span className="text-[10px] text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded font-mono">
+                            {tc.status}
+                          </span>
+                        </div>
+                        {tc.args && (
+                          <div className="text-[10px] text-slate-400 font-mono bg-black/30 p-1.5 rounded truncate">
+                            args: {JSON.stringify(tc.args)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-slate-500 text-[11px] pt-1">
+                <span>Created: {new Date(detailModalMsg.createdAt).toLocaleString()}</span>
+                <span>Role: {detailModalMsg.role}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

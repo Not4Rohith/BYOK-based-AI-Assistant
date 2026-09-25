@@ -1,0 +1,24 @@
+{
+  "name": "mobile-app",
+  "private": true,
+  "version": "1.0.0",
+  "main": "App.tsx",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios"
+  },
+  "dependencies": {
+    "@ai-task-manager/shared-types": "*",
+    "react": "^18.2.0",
+    "react-dom": "^18.3.1",
+    "react-native": "0.73.4",
+    "react-native-web": "^0.19.13"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@types/react-native": "^0.73.0",
+    "typescript": "^5.2.2"
+  }
+}

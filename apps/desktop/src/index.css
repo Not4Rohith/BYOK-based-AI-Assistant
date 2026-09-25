@@ -1,0 +1,46 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#1f1f1f] text-[#e3e3e3] antialiased;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+/* Google Tasks Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Material 3 Card & Pill Styles */
+.google-card {
+  background-color: #252525;
+  border-radius: 20px;
+}
+
+.google-pill-active {
+  background-color: #004a77;
+  color: #c2e7ff;
+}
+
+.google-pill-hover:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}

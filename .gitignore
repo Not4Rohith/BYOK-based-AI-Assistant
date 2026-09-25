@@ -1,0 +1,52 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+*.tsbuildinfo
+
+# Rust & Tauri builds
+target/
+**/src-tauri/target/
+**/src-tauri/gen/android/app/build/
+**/src-tauri/gen/android/.gradle/
+**/src-tauri/gen/android/local.properties
+**/src-tauri/gen/schemas/
+
+# Mobile binaries & Android outputs
+*.apk
+*.aab
+app-debug.apk
+
+# Secrets & environment credentials
+*.env
+*.env.*
+atlas-credentials.env
+
+# Logs and temporary files
+*.log
+.gemini/
+.tempmediaStorage/
+tmp/
+temp/
+
+# IDE & Editor files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
