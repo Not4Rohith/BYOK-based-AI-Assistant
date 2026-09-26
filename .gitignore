@@ -30,6 +30,9 @@ app-debug.apk
 *.env
 *.env.*
 atlas-credentials.env
+ai-config.json
+backend/data/
+**/ai-config.json
 
 # Logs and temporary files
 *.log
