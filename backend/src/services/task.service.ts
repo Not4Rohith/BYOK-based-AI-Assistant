@@ -87,7 +87,7 @@ export class TaskService {
         status: data.status || 'pending',
         priority: data.priority || 'medium',
         starred: !!data.starred,
-        listId: data.listId || null,
+        listId: data.listId || 'list_1',
         estimatedMinutes: data.estimatedMinutes || 30,
         scheduledStart: data.scheduledStart || new Date().toISOString(),
         scheduledEnd:
@@ -112,7 +112,7 @@ export class TaskService {
       status: data.status || 'pending',
       priority: data.priority || 'medium',
       starred: !!data.starred,
-      listId: data.listId || undefined,
+      listId: data.listId || 'list_1',
       estimatedMinutes: data.estimatedMinutes || 30,
       scheduledStart: data.scheduledStart || new Date().toISOString(),
       scheduledEnd:

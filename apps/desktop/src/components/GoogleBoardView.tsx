@@ -175,10 +175,18 @@ export const GoogleBoardView: React.FC<GoogleBoardViewProps> = ({
 
   const activeMenuTask = tasks.find((t) => t._id === menuTaskId);
 
+  const firstListId = taskLists[0]?._id;
+  const knownListIds = new Set(taskLists.map((l) => l._id));
+
   return (
     <div className="h-full w-full overflow-x-auto p-6 flex items-start space-x-6 select-none relative transition-all duration-300">
       {listsToDisplay.map((list) => {
-        let listTasks = tasks.filter((t) => t.listId === list._id || t.tags?.includes(list._id));
+        let listTasks = tasks.filter((t) => {
+          if (t.listId === list._id || t.tags?.includes(list._id)) return true;
+          // Fallback: If this is the primary column, capture tasks with missing/unlisted listId so they are never lost
+          if (list._id === firstListId && (!t.listId || !knownListIds.has(t.listId))) return true;
+          return false;
+        });
         if (activeView === 'starred') {
           listTasks = listTasks.filter((t) => t.starred);
         }

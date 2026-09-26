@@ -23,7 +23,25 @@ export class TaskListService {
           { expiresAt: { $gt: now } },
         ],
       }).sort({ createdAt: 1 });
+      if (existingDocs.length === 0) {
+        const defaultDoc = await TaskListModel.create({
+          _id: 'list_1',
+          userId: 'usr_1',
+          title: 'My Tasks',
+        });
+        return [this.mapDocToList(defaultDoc)];
+      }
       return existingDocs.map(this.mapDocToList);
+    }
+
+    if (this.inMemoryLists.length === 0) {
+      this.inMemoryLists = [{
+        _id: 'list_1',
+        userId: 'usr_1',
+        title: 'My Tasks',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      }];
     }
     return this.inMemoryLists.filter(
       (l) => !l.expiresAt || l.expiresAt > nowIso
