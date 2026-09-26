@@ -260,17 +260,13 @@ export const api = {
           .map((m) => m.replace(/^~/, '').trim())
           .filter((m, i, arr) => m.length > 0 && arr.indexOf(m) === i);
 
-        if (candidateModels.length === 0) {
-          candidateModels.push('openai/gpt-4o-mini');
-        }
-
         let lastErrStatus = 402;
         let lastErrText = '';
 
         for (let idx = 0; idx < candidateModels.length; idx++) {
           const candidateModel = candidateModels[idx];
           console.log(`[Client Fallback] Trying model [${idx + 1}/${candidateModels.length}]: "${candidateModel}"`);
-          const maxTokenTiers = [400, 250, 150];
+          const maxTokenTiers = [150, 100, 60];
 
           for (let tierIdx = 0; tierIdx < maxTokenTiers.length; tierIdx++) {
             const tokens = maxTokenTiers[tierIdx];

@@ -19,10 +19,6 @@ export class OpenRouterProvider implements AIProvider {
       ...(fallbackModels || []),
     ].filter((m, i, arr) => m && arr.indexOf(m) === i);
 
-    if (candidateModels.length === 0) {
-      candidateModels.push('openai/gpt-4o-mini');
-    }
-
     let lastError = '';
 
     for (const model of candidateModels) {
@@ -46,7 +42,7 @@ export class OpenRouterProvider implements AIProvider {
             model,
             messages: payloadMessages,
             temperature: request.temperature ?? 0.7,
-            max_tokens: request.maxTokens ?? 1000,
+            max_tokens: request.maxTokens ?? 150,
           }),
         });
 

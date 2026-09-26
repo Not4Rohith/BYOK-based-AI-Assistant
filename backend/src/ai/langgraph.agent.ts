@@ -19,19 +19,13 @@ export class LangGraphAgentEngine {
       throw new Error('OpenRouter API key is missing. Please configure your key in Settings.');
     }
 
-    const rawCandidates = [
+    const candidateModels = [
       config.openrouter?.defaultModel,
       ...(config.openrouter?.fallbackModels || []),
-    ];
-
-    const candidateModels = rawCandidates
+    ]
       .filter((m): m is string => Boolean(m && typeof m === 'string'))
       .map((m) => m.replace(/^~/, '').trim())
       .filter((m, i, arr) => m.length > 0 && arr.indexOf(m) === i);
-
-    if (candidateModels.length === 0) {
-      candidateModels.push('openai/gpt-4o-mini');
-    }
 
     const tools = createLangChainTools(taskService);
     const toolNode = new ToolNode(tools);
@@ -74,8 +68,8 @@ ${config.dailySchedule || 'No fixed schedule defined.'}
       const modelName = candidateModels[candidateIdx];
       console.log(`[LangGraphAgentEngine] 🤖 Candidate Model [${candidateIdx + 1}/${candidateModels.length}]: "${modelName}"`);
 
-      // Try tokens limit candidate tiers (400 -> 250 -> 150) to recover from OpenRouter 402 max_tokens credit limits
-      const maxTokenTiers = [400, 250, 150];
+      // Try tokens limit candidate tiers (150 -> 100 -> 60) to recover from OpenRouter 402 max_tokens credit limits
+      const maxTokenTiers = [150, 100, 60];
 
       for (let tierIdx = 0; tierIdx < maxTokenTiers.length; tierIdx++) {
         const currentMaxTokens = maxTokenTiers[tierIdx];
@@ -97,8 +91,10 @@ ${config.dailySchedule || 'No fixed schedule defined.'}
             },
             temperature: 0.7,
             maxTokens: currentMaxTokens,
+            maxCompletionTokens: currentMaxTokens,
             modelKwargs: {
               max_tokens: currentMaxTokens,
+              max_completion_tokens: currentMaxTokens,
             },
           });
 
