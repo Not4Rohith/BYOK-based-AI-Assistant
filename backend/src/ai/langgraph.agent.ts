@@ -197,7 +197,7 @@ export class LangGraphAgentEngine {
             }
           }
 
-          finalResponseText = responseTextCandidate || 'Completed your request.';
+          finalResponseText = responseTextCandidate || 'Request unsucessful';
 
           // Aggregate token usage cleanly (take max input_tokens per turn to avoid double counting cumulative metrics)
           let promptTokens = 0;

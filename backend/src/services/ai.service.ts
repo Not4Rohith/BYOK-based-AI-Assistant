@@ -181,6 +181,24 @@ export class AIService {
         openrouterApiKey: this.config.openrouter?.apiKey,
       });
 
+      // Safety guard: Elevate SIMPLE_LLM to AGENT if action tools are present or prompt implies task creation/action
+      if (decision.route === 'SIMPLE_LLM') {
+        const actionTools = ['create_task', 'batch_create_tasks', 'update_task', 'complete_task', 'delete_task', 'replan_day', 'create_list', 'bulk_update_tasks'];
+        const hasActionTool = decision.tools && decision.tools.some((t) => actionTools.includes(t));
+        const startsWithAction = /^(?:create|add|schedule|delete|remove|update|complete|replan)\b/i.test(userPrompt.trim());
+
+        if (hasActionTool || startsWithAction) {
+          console.log(`[AIService] 🔄 SIMPLE_LLM route was assigned, but action tools/prompt require tool execution. Elevating to AGENT route...`);
+          decision.route = 'AGENT';
+          if (!decision.tools || decision.tools.length === 0) {
+            decision.tools = ['create_task', 'batch_create_tasks', 'get_tasks', 'get_today_agenda', 'replan_day'];
+          }
+          if (!decision.promptModules || decision.promptModules.length === 0) {
+            decision.promptModules = ['base', 'taskCreation', 'scheduling', 'agentReasoning'];
+          }
+        }
+      }
+
       const telemetry: LayaTelemetryMetrics = {
         route: decision.route,
         operation: decision.operation,

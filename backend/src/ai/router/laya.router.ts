@@ -37,6 +37,10 @@ Analyze the user prompt and respond with ONLY a raw valid JSON object without co
   "parameters": {}
 }
 
+CRITICAL ROUTING RULES:
+1. If the user prompt asks to CREATE, ADD, EDIT, COMPLETE, DELETE, or REPLAN tasks/categories (e.g. "add tasks", "create task", "delete task"), set route to AGENT or DIRECT. NEVER route task creation/mutation to SIMPLE_LLM.
+2. SIMPLE_LLM is strictly reserved for greetings ("hello", "hi"), casual conversation, and pure informational advice where NO tool actions are performed.
+
 User Prompt: "${trimmed}"`;
 
         const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {

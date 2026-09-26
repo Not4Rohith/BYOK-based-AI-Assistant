@@ -79,27 +79,53 @@ export class LayaRuleEngine {
       };
     }
 
-    // 4. Direct Task Creation
-    const createMatch = lower.match(/^(?:create|add|schedule)\s+(?:a\s+)?task\s+(?:called|named\s+)?(.+)$/i);
-    if (createMatch && createMatch[1]) {
-      const rawTitle = createMatch[1].trim().replace(/^["']|["']$/g, '');
+    // 4. Multi-Task Creation / Dynamic Goal Breakdown (Agent Route)
+    if (
+      /^(?:create|add|schedule|generate|suggest|break\s+down)\s+(?:all\s+)?(?:necessary\s+)?tasks?\b/i.test(p) ||
+      lower.includes('add all necessary tasks') ||
+      lower.includes('add tasks') ||
+      lower.includes('create tasks') ||
+      lower.includes('suggest tasks') ||
+      lower.includes('generate tasks')
+    ) {
       return {
-        route: 'DIRECT',
-        operation: 'create_task',
+        route: 'AGENT',
         confidence: 0.95,
-        reasoningLevel: 'NONE',
-        promptModules: ['taskCreation'],
-        tools: ['create_task'],
-        context: ['TASKS', 'TASK_LISTS'],
+        reasoningLevel: 'MEDIUM',
+        promptModules: ['base', 'taskCreation', 'scheduling', 'agentReasoning'],
+        tools: ['create_task', 'batch_create_tasks', 'get_tasks', 'get_today_agenda', 'replan_day'],
+        context: ['TASKS', 'TODAY_AGENDA'],
         history: false,
         memory: false,
         requiresClarification: false,
-        reason: 'Direct single task creation command',
-        parameters: { title: rawTitle },
+        reason: 'Multi-task creation / dynamic planning prompt requiring tool calls',
+        parameters: {},
       };
     }
 
-    // 5. Direct Task Deletion
+    // 5. Direct Single Task Creation
+    const createMatch = lower.match(/^(?:create|add|schedule)\s+(?:a\s+)?task\s+(?:called|named\s+|:\s*)?(.+)$/i);
+    if (createMatch && createMatch[1]) {
+      const rawTitle = createMatch[1].trim().replace(/^["']|["']$/g, '');
+      if (rawTitle.length > 0 && !rawTitle.toLowerCase().startsWith('tasks')) {
+        return {
+          route: 'DIRECT',
+          operation: 'create_task',
+          confidence: 0.95,
+          reasoningLevel: 'NONE',
+          promptModules: ['taskCreation'],
+          tools: ['create_task'],
+          context: ['TASKS', 'TASK_LISTS'],
+          history: false,
+          memory: false,
+          requiresClarification: false,
+          reason: 'Direct single task creation command',
+          parameters: { title: rawTitle },
+        };
+      }
+    }
+
+    // 6. Direct Task Deletion
     const deleteMatch = lower.match(/^(?:delete|remove)\s+(?:the\s+)?task\s+(.+)$/i);
     if (deleteMatch && deleteMatch[1]) {
       const target = deleteMatch[1].trim().replace(/^["']|["']$/g, '');
@@ -135,7 +161,7 @@ export class LayaRuleEngine {
       };
     }
 
-    // 6. Direct List / Category Operations
+    // 7. Direct List / Category Operations
     const createListMatch = lower.match(/^(?:create|add)\s+(?:a\s+)?(?:category|list)\s+(?:called|named\s+)?(.+)$/i);
     if (createListMatch && createListMatch[1]) {
       const listTitle = createListMatch[1].trim().replace(/^["']|["']$/g, '');
@@ -172,7 +198,7 @@ export class LayaRuleEngine {
       };
     }
 
-    // 7. Direct Replanning
+    // 8. Direct Replanning
     if (/^(replan\s+my\s+day|replan\s+schedule|auto\s+replan)$/i.test(p)) {
       return {
         route: 'DIRECT',
@@ -190,7 +216,7 @@ export class LayaRuleEngine {
       };
     }
 
-    // 8. Simple LLM Reasoning (Summarization, Focus Advice, Task Queries)
+    // 9. Simple LLM Reasoning (Summarization, Focus Advice, Task Queries)
     if (
       lower.includes('which task should i prioritize') ||
       lower.includes('why is my schedule overloaded') ||
@@ -203,7 +229,7 @@ export class LayaRuleEngine {
         confidence: 0.92,
         reasoningLevel: 'LOW',
         promptModules: ['base', 'prioritization', 'scheduling'],
-        tools: ['get_tasks', 'get_today_agenda'],
+        tools: [],
         context: ['TASKS', 'TODAY_AGENDA', 'USER_PREFERENCES'],
         history: false,
         memory: true,
@@ -213,7 +239,7 @@ export class LayaRuleEngine {
       };
     }
 
-    // 9. Multi-step Agentic Replanning
+    // 10. Multi-step Agentic Replanning
     if (
       lower.includes('reorganize my entire day') ||
       lower.includes('create a complete study plan') ||
@@ -224,7 +250,7 @@ export class LayaRuleEngine {
         confidence: 0.95,
         reasoningLevel: 'HIGH',
         promptModules: ['base', 'scheduling', 'prioritization', 'agentReasoning'],
-        tools: ['get_tasks', 'get_today_agenda', 'replan_day', 'update_task', 'bulk_update_tasks'],
+        tools: ['get_tasks', 'get_today_agenda', 'replan_day', 'update_task', 'bulk_update_tasks', 'create_task'],
         context: ['TASKS', 'TODAY_AGENDA', 'USER_PREFERENCES', 'GOALS'],
         history: true,
         memory: true,
