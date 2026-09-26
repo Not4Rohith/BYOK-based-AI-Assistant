@@ -308,10 +308,18 @@ export function createLangChainTools(taskService?: TaskService) {
   const deleteTaskTool = tool(
     async ({ taskId, title }) => {
       if (!taskService) return 'Task service unavailable.';
+      const searchName = (title || taskId || '').trim();
+      const normSearch = searchName.toLowerCase().replace(/[.!?]+$/, '');
+      const isBulkTarget = ['all tasks', 'all', 'all my tasks', 'everything', 'every task', 'all of my tasks', 'all of the tasks'].includes(normSearch);
+
+      if (isBulkTarget) {
+        const count = await taskService.deleteAllTasks();
+        return JSON.stringify({ success: true, count, message: `Successfully deleted all ${count} tasks.` });
+      }
+
       let targetId = taskId;
 
       if (!targetId || !targetId.startsWith('task_')) {
-        const searchName = title || taskId;
         const all = await taskService.getAllTasks();
         const found = all.find((t) => t._id === searchName || t.title.toLowerCase().trim() === searchName.toLowerCase().trim());
         if (found) targetId = found._id;

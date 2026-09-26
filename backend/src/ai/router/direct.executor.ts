@@ -121,9 +121,21 @@ export class DirectExecutionHandler {
           const targetTitle = params.taskTitle || params.taskId;
           if (!targetTitle) break;
 
+          const normTarget = String(targetTitle).toLowerCase().trim().replace(/[.!?]+$/, '');
+          const isBulkTarget = ['all tasks', 'all', 'all my tasks', 'everything', 'every task', 'all of my tasks', 'all of the tasks'].includes(normTarget);
+
+          if (isBulkTarget) {
+            const count = await taskService.deleteAllTasks();
+            executedLogs.push({ tool: 'delete_all_tasks', args: { count }, status: 'success' });
+            return {
+              responseText: `🗑️ Successfully deleted all **${count}** task(s) from your board.`,
+              toolCallsExecuted: executedLogs,
+            };
+          }
+
           const allTasks = await taskService.getAllTasks();
           const matched = allTasks.find(
-            (t) => t._id === targetTitle || t.title.toLowerCase().includes(String(targetTitle).toLowerCase())
+            (t) => t._id === targetTitle || t.title.toLowerCase().includes(normTarget)
           );
 
           if (matched) {
@@ -139,6 +151,16 @@ export class DirectExecutionHandler {
               toolCallsExecuted: [],
             };
           }
+        }
+
+        case 'delete_all_tasks': {
+          if (!taskService) break;
+          const count = await taskService.deleteAllTasks();
+          executedLogs.push({ tool: 'delete_all_tasks', args: { count }, status: 'success' });
+          return {
+            responseText: `🗑️ Successfully deleted all **${count}** task(s) from your board.`,
+            toolCallsExecuted: executedLogs,
+          };
         }
 
         case 'get_lists': {

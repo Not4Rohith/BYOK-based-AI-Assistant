@@ -28,7 +28,8 @@ const DELETE_VERBS = [
 export class LayaRuleEngine {
   public evaluateRules(prompt: string): LayaRoutingResult | null {
     const p = prompt.trim();
-    const lower = p.toLowerCase();
+    const cleanPrompt = p.replace(/[.!?]+$/, '').trim();
+    const lower = cleanPrompt.toLowerCase();
 
     // 1. Simple Greetings & Casual Chat
     if (/^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you)[\s!?.]*$/i.test(p)) {
@@ -58,7 +59,7 @@ export class LayaRuleEngine {
       for (const verb of COMPLETE_VERBS) {
         if (lower.includes(verb)) {
           const idx = lower.indexOf(verb);
-          const rawTarget = p.substring(idx + verb.length).replace(/^(?:task|the task|as done|as completed|as finished|\s)+/i, '').trim();
+          const rawTarget = cleanPrompt.substring(idx + verb.length).replace(/^(?:task|the task|as done|as completed|as finished|\s)+/i, '').trim();
           const taskTitle = rawTarget.replace(/^["']|["']$/g, '');
           if (taskTitle.length > 0) {
             return {
@@ -80,13 +81,60 @@ export class LayaRuleEngine {
       }
     }
 
-    // 3. Semantic Task Deletion Intent
+    // 3. Semantic Task Deletion Intent (Single Task or Bulk Deletion)
+    const isBulkDelete =
+      /^(?:please\s+)?(?:can\s+you\s+)?(?:delete|remove|clear|erase|purge|drop)\s+(?:all\s+)?(?:my\s+)?tasks$/i.test(cleanPrompt) ||
+      /^(?:delete|clear|remove|erase|purge|drop)\s+(?:all|everything|all\s+tasks|all\s+my\s+tasks|all\s+of\s+my\s+tasks)$/i.test(cleanPrompt) ||
+      lower === 'delete all tasks' ||
+      lower === 'clear all tasks' ||
+      lower === 'delete all' ||
+      lower === 'clear tasks' ||
+      lower === 'remove all tasks' ||
+      lower === 'delete everything';
+
+    if (isBulkDelete) {
+      return {
+        route: 'DIRECT',
+        operation: 'delete_all_tasks',
+        confidence: 0.98,
+        reasoningLevel: 'NONE',
+        promptModules: ['taskDeletion'],
+        tools: ['delete_all_tasks'],
+        context: ['TASKS'],
+        history: false,
+        memory: false,
+        requiresClarification: false,
+        reason: 'Direct bulk task deletion command',
+        parameters: {},
+      };
+    }
+
     if (hasDeleteVerb) {
       for (const verb of DELETE_VERBS) {
         if (lower.includes(verb)) {
           const idx = lower.indexOf(verb);
-          const rawTarget = p.substring(idx + verb.length).replace(/^(?:task|the task|\s)+/i, '').trim();
-          const target = rawTarget.replace(/^["']|["']$/g, '');
+          const rawTarget = cleanPrompt.substring(idx + verb.length).replace(/^(?:task|the task|\s)+/i, '').trim();
+          const target = rawTarget.replace(/^["']|["']$/g, '').toLowerCase().replace(/[.!?]+$/, '');
+
+          if (
+            ['all tasks', 'all', 'all my tasks', 'everything', 'every task', 'all of my tasks', 'all of the tasks'].includes(target)
+          ) {
+            return {
+              route: 'DIRECT',
+              operation: 'delete_all_tasks',
+              confidence: 0.98,
+              reasoningLevel: 'NONE',
+              promptModules: ['taskDeletion'],
+              tools: ['delete_all_tasks'],
+              context: ['TASKS'],
+              history: false,
+              memory: false,
+              requiresClarification: false,
+              reason: 'Bulk task deletion request',
+              parameters: {},
+            };
+          }
+
           if (target === 'that' || target === 'it' || target.length === 0) {
             return {
               route: 'DIRECT',

@@ -24,11 +24,11 @@ export class LayaRouter {
 Analyze the user prompt and respond with ONLY a raw valid JSON object without codeblocks:
 {
   "route": "DIRECT" | "SIMPLE_LLM" | "AGENT",
-  "operation": "get_tasks" | "create_task" | "update_task" | "complete_task" | "delete_task" | "replan_day" | "none",
+  "operation": "get_tasks" | "create_task" | "update_task" | "complete_task" | "delete_task" | "delete_all_tasks" | "replan_day" | "get_lists" | "create_list" | "none",
   "confidence": 0.85,
   "reasoningLevel": "NONE" | "LOW" | "MEDIUM" | "HIGH",
-  "promptModules": ["base", "taskQuery", "taskMutation", "taskCreation", "scheduling", "prioritization"],
-  "tools": ["get_tasks", "complete_task", "create_task", "replan_day"],
+  "promptModules": ["base", "taskQuery", "taskMutation", "taskCreation", "taskDeletion", "scheduling", "prioritization"],
+  "tools": ["get_tasks", "complete_task", "create_task", "delete_task", "delete_all_tasks", "replan_day"],
   "context": ["TASKS", "TODAY_AGENDA", "USER_PREFERENCES"],
   "history": false,
   "memory": false,
@@ -38,8 +38,9 @@ Analyze the user prompt and respond with ONLY a raw valid JSON object without co
 }
 
 CRITICAL ROUTING RULES:
-1. If the user prompt asks to CREATE, ADD, EDIT, COMPLETE, DELETE, or REPLAN tasks/categories (e.g. "add tasks", "create task", "delete task"), set route to AGENT or DIRECT. NEVER route task creation/mutation to SIMPLE_LLM.
-2. SIMPLE_LLM is strictly reserved for greetings ("hello", "hi"), casual conversation, and pure informational advice where NO tool actions are performed.
+1. If the user prompt asks to delete all tasks, clear all tasks, or delete everything, set route to DIRECT and operation to "delete_all_tasks".
+2. If the user prompt asks to CREATE, ADD, EDIT, COMPLETE, DELETE, or REPLAN tasks/categories (e.g. "add tasks", "create task", "delete task"), set route to AGENT or DIRECT. NEVER route task creation/mutation to SIMPLE_LLM.
+3. SIMPLE_LLM is strictly reserved for greetings ("hello", "hi"), casual conversation, and pure informational advice where NO tool actions are performed.
 
 User Prompt: "${trimmed}"`;
 
