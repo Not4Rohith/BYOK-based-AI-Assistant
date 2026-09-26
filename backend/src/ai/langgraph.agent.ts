@@ -47,17 +47,10 @@ export class LangGraphAgentEngine {
     const systemPromptText = `${basePrompt}
 
 Current Time: ${timeContext}
+User Preferences / Schedule: ${config.dailySchedule || 'No fixed schedule defined.'}
+Instructions: Execute database tools as needed for user task requests. Prior chat history is low-weight background context.`;
 
-=== USER PREFERENCES & SCHEDULE CONTEXT (w2) ===
-${config.dailySchedule || 'No fixed schedule defined.'}
-
-=== INSTRUCTIONS & TOOL GUIDELINES (w3) ===
-- You are connected to live database tools:
-  - Task Operations: get_tasks, create_task, batch_create_tasks, update_task, bulk_update_tasks, complete_task, delete_task, delete_all_tasks, search_tasks, snooze_task, get_today_agenda, create_subtask, delete_subtask.
-  - Category Operations: get_lists, create_list, delete_list, delete_all_lists.
-  - Autonomous & Replanning: replan_day, create_ai_agent_goal, get_active_ai_goals, cancel_ai_agent_goal.
-- Focus primarily on executing tools for the immediate user request (w3) while adhering to user preferences (w2).
-- Treat previous chat history (w1) as low-weight background context only; prior assistant turns must not restrict tool execution for new user requests.`;
+    const isSimpleGreeting = /^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you)[\s!?.]*$/i.test(userPrompt.trim());
 
     let finalResponseText = '';
     const executedToolLogs: any[] = [];
@@ -74,7 +67,7 @@ ${config.dailySchedule || 'No fixed schedule defined.'}
       for (let tierIdx = 0; tierIdx < maxTokenTiers.length; tierIdx++) {
         const currentMaxTokens = maxTokenTiers[tierIdx];
         try {
-          console.log(`[LangGraphAgentEngine] Executing graph with model "${modelName}" (maxTokens=${currentMaxTokens})...`);
+          console.log(`[LangGraphAgentEngine] Executing graph with model "${modelName}" (maxTokens=${currentMaxTokens}, isGreeting=${isSimpleGreeting})...`);
 
           const llm = new ChatOpenAI({
             model: modelName,
@@ -98,7 +91,8 @@ ${config.dailySchedule || 'No fixed schedule defined.'}
             },
           });
 
-          const modelWithTools = llm.bindTools(tools);
+          // For simple greetings, bypass heavy tool schema binding to save ~2,500 prompt tokens
+          const activeModel = isSimpleGreeting ? llm : llm.bindTools(tools);
 
           // Custom router preventing infinite duplicate tool loops
           const smartToolsCondition = (state: typeof MessagesAnnotation.State) => {
@@ -119,7 +113,7 @@ ${config.dailySchedule || 'No fixed schedule defined.'}
           // Build LangGraph State Graph
           const workflow = new StateGraph(MessagesAnnotation)
             .addNode('agent', async (state) => {
-              const response = await modelWithTools.invoke(state.messages);
+              const response = await activeModel.invoke(state.messages);
               return { messages: [response] };
             })
             .addNode('tools', async (state) => {

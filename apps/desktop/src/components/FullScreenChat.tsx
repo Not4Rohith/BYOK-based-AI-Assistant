@@ -21,7 +21,7 @@ export const FullScreenChat: React.FC<FullScreenChatProps> = ({
   const [selectedSessionId, setSelectedSessionId] = useState<string>('');
   const [sessionMessages, setSessionMessages] = useState<ChatMessage[]>(messages);
   const [showMobileSessions, setShowMobileSessions] = useState<boolean>(false);
-  
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isAutoScrollEnabled = useRef<boolean>(true);
@@ -77,9 +77,8 @@ export const FullScreenChat: React.FC<FullScreenChatProps> = ({
     <div className="flex h-full w-full bg-[#1E1E1E] text-white relative font-sans overflow-hidden">
       {/* Left Sidebar - Chat Sessions History (Desktop & Mobile Drawer) */}
       <div
-        className={`w-72 bg-[#141414] border-r border-white/10 flex flex-col z-30 transition-all duration-200 ${
-          showMobileSessions ? 'fixed inset-y-0 left-0 shadow-2xl flex' : 'hidden md:flex'
-        }`}
+        className={`w-72 bg-[#141414] border-r border-white/10 flex flex-col z-30 transition-all duration-200 ${showMobileSessions ? 'fixed inset-y-0 left-0 shadow-2xl flex' : 'hidden md:flex'
+          }`}
       >
         <div className="p-4 pt-12 md:pt-4 border-b border-white/10 flex items-center justify-between text-[#e3e3e3]">
           <div className="flex items-center space-x-2">
@@ -93,7 +92,7 @@ export const FullScreenChat: React.FC<FullScreenChatProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {sessions.length === 0 ? (
             <div className="text-xs text-slate-500 p-3 text-center italic">No saved sessions yet</div>
@@ -106,11 +105,10 @@ export const FullScreenChat: React.FC<FullScreenChatProps> = ({
                   setSelectedSessionId(session._id);
                   setShowMobileSessions(false);
                 }}
-                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-colors ${
-                  (selectedSessionId === session._id || (!selectedSessionId && sessions[0]?._id === session._id))
-                    ? 'bg-[#2A2B32] text-white border border-blue-500/40 shadow-sm font-semibold'
-                    : 'text-[#a1a1aa] hover:bg-[#202020]'
-                }`}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-colors ${(selectedSessionId === session._id || (!selectedSessionId && sessions[0]?._id === session._id))
+                  ? 'bg-[#2A2B32] text-white border border-blue-500/40 shadow-sm font-semibold'
+                  : 'text-[#a1a1aa] hover:bg-[#202020]'
+                  }`}
               >
                 <div className="truncate font-medium">{session.title}</div>
                 {session.date && <div className="text-[10px] text-slate-500 mt-0.5">{session.date}</div>}
@@ -124,7 +122,7 @@ export const FullScreenChat: React.FC<FullScreenChatProps> = ({
       <div className="flex-1 flex flex-col h-full bg-[#1E1E1E] min-w-0">
         {/* Safe Top Header Clearance for Mobile Notch / Slide-down Top Bar */}
         <div className="pt-12 pb-3 px-4 border-b border-white/10 bg-[#141414] flex items-center justify-between shrink-0 z-20">
-          <button 
+          <button
             onClick={onBack}
             className="flex items-center space-x-2 text-slate-400 hover:text-white transition-colors"
           >
@@ -133,10 +131,7 @@ export const FullScreenChat: React.FC<FullScreenChatProps> = ({
           </button>
 
           <div className="flex items-center space-x-2">
-            <span className="hidden sm:flex items-center space-x-1.5 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-              <span>LangGraph Agent</span>
-            </span>
+
 
             {/* Mobile Chat Sessions Toggle */}
             <button
@@ -150,131 +145,131 @@ export const FullScreenChat: React.FC<FullScreenChatProps> = ({
         </div>
 
         {/* Chat Messages Body */}
-        <div 
+        <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto p-4 md:p-8"
         >
-            <div className="max-w-3xl mx-auto space-y-6">
-              {sessionMessages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 py-8">
-                  <div className="w-16 h-16 bg-gradient-to-tr from-purple-600 via-indigo-600 to-blue-500 rounded-3xl flex items-center justify-center shadow-xl shadow-purple-500/20">
-                    <Sparkles className="w-8 h-8 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold text-white tracking-tight">How can I assist you today?</h3>
-                    <p className="text-slate-400 text-sm mt-2 max-w-md mx-auto">
-                      Connected to database tools for task scheduling, replanning, list management, and long-term memory retrieval.
-                    </p>
-                  </div>
-
-                  {/* ChatGPT / Gemini Style Suggestion Chips */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-xl pt-4">
-                    <button
-                      onClick={() => handleSubmit(undefined, "Replan my day schedule based on priority tasks.")}
-                      className="p-3.5 rounded-2xl bg-[#2A2B32]/80 hover:bg-[#343541] border border-white/10 text-left transition-all group shadow-sm active:scale-[0.98]"
-                    >
-                      <div className="flex items-center space-x-2 text-xs font-semibold text-purple-400 mb-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        <span>Smart Replanning</span>
-                      </div>
-                      <p className="text-xs text-slate-300 group-hover:text-white">Replan my day schedule based on priority tasks</p>
-                    </button>
-
-                    <button
-                      onClick={() => handleSubmit(undefined, "Show my agenda and tasks due today.")}
-                      className="p-3.5 rounded-2xl bg-[#2A2B32]/80 hover:bg-[#343541] border border-white/10 text-left transition-all group shadow-sm active:scale-[0.98]"
-                    >
-                      <div className="flex items-center space-x-2 text-xs font-semibold text-blue-400 mb-1">
-                        <CheckSquare className="w-3.5 h-3.5" />
-                        <span>Today's Agenda</span>
-                      </div>
-                      <p className="text-xs text-slate-300 group-hover:text-white">Show my agenda and tasks due today</p>
-                    </button>
-
-                    <button
-                      onClick={() => handleSubmit(undefined, "Add a task: Study machine learning models tomorrow at 4 PM.")}
-                      className="p-3.5 rounded-2xl bg-[#2A2B32]/80 hover:bg-[#343541] border border-white/10 text-left transition-all group shadow-sm active:scale-[0.98]"
-                    >
-                      <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-400 mb-1">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Auto-Schedule Task</span>
-                      </div>
-                      <p className="text-xs text-slate-300 group-hover:text-white">Add task: Study machine learning models tomorrow at 4 PM</p>
-                    </button>
-
-                    <button
-                      onClick={() => handleSubmit(undefined, "Retrieve my active long-term memories and goals.")}
-                      className="p-3.5 rounded-2xl bg-[#2A2B32]/80 hover:bg-[#343541] border border-white/10 text-left transition-all group shadow-sm active:scale-[0.98]"
-                    >
-                      <div className="flex items-center space-x-2 text-xs font-semibold text-amber-400 mb-1">
-                        <Brain className="w-3.5 h-3.5" />
-                        <span>Memory Context</span>
-                      </div>
-                      <p className="text-xs text-slate-300 group-hover:text-white">Retrieve my active long-term memories and goals</p>
-                    </button>
-                  </div>
+          <div className="max-w-3xl mx-auto space-y-6">
+            {sessionMessages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 py-8">
+                <div className="w-16 h-16 bg-gradient-to-tr from-purple-600 via-indigo-600 to-blue-500 rounded-3xl flex items-center justify-center shadow-xl shadow-purple-500/20">
+                  <Sparkles className="w-8 h-8 text-white" />
                 </div>
-              ) : (
-                sessionMessages.map((msg, idx) => (
-                  <div key={msg._id || idx} className="flex items-start space-x-4 group">
-                    {msg.role === 'assistant' || msg.role === 'system' ? (
-                      <div className="w-8 h-8 rounded-full bg-blue-600 flex flex-shrink-0 items-center justify-center shadow">
-                        <Bot className="w-5 h-5 text-white" />
+                <div>
+                  <h3 className="text-2xl font-bold text-white tracking-tight">How can I assist you today?</h3>
+                  <p className="text-slate-400 text-sm mt-2 max-w-md mx-auto">
+                    Connected to database tools for task scheduling, replanning, list management, and long-term memory retrieval.
+                  </p>
+                </div>
+
+                {/* ChatGPT / Gemini Style Suggestion Chips */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-xl pt-4">
+                  <button
+                    onClick={() => handleSubmit(undefined, "Replan my day schedule based on priority tasks.")}
+                    className="p-3.5 rounded-2xl bg-[#2A2B32]/80 hover:bg-[#343541] border border-white/10 text-left transition-all group shadow-sm active:scale-[0.98]"
+                  >
+                    <div className="flex items-center space-x-2 text-xs font-semibold text-purple-400 mb-1">
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>Smart Replanning</span>
+                    </div>
+                    <p className="text-xs text-slate-300 group-hover:text-white">Replan my day schedule based on priority tasks</p>
+                  </button>
+
+                  <button
+                    onClick={() => handleSubmit(undefined, "Show my agenda and tasks due today.")}
+                    className="p-3.5 rounded-2xl bg-[#2A2B32]/80 hover:bg-[#343541] border border-white/10 text-left transition-all group shadow-sm active:scale-[0.98]"
+                  >
+                    <div className="flex items-center space-x-2 text-xs font-semibold text-blue-400 mb-1">
+                      <CheckSquare className="w-3.5 h-3.5" />
+                      <span>Today's Agenda</span>
+                    </div>
+                    <p className="text-xs text-slate-300 group-hover:text-white">Show my agenda and tasks due today</p>
+                  </button>
+
+                  <button
+                    onClick={() => handleSubmit(undefined, "Add a task: Study machine learning models tomorrow at 4 PM.")}
+                    className="p-3.5 rounded-2xl bg-[#2A2B32]/80 hover:bg-[#343541] border border-white/10 text-left transition-all group shadow-sm active:scale-[0.98]"
+                  >
+                    <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-400 mb-1">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Auto-Schedule Task</span>
+                    </div>
+                    <p className="text-xs text-slate-300 group-hover:text-white">Add task: Study machine learning models tomorrow at 4 PM</p>
+                  </button>
+
+                  <button
+                    onClick={() => handleSubmit(undefined, "Retrieve my active long-term memories and goals.")}
+                    className="p-3.5 rounded-2xl bg-[#2A2B32]/80 hover:bg-[#343541] border border-white/10 text-left transition-all group shadow-sm active:scale-[0.98]"
+                  >
+                    <div className="flex items-center space-x-2 text-xs font-semibold text-amber-400 mb-1">
+                      <Brain className="w-3.5 h-3.5" />
+                      <span>Memory Context</span>
+                    </div>
+                    <p className="text-xs text-slate-300 group-hover:text-white">Retrieve my active long-term memories and goals</p>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              sessionMessages.map((msg, idx) => (
+                <div key={msg._id || idx} className="flex items-start space-x-4 group">
+                  {msg.role === 'assistant' || msg.role === 'system' ? (
+                    <div className="w-8 h-8 rounded-full bg-blue-600 flex flex-shrink-0 items-center justify-center shadow">
+                      <Bot className="w-5 h-5 text-white" />
+                    </div>
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-purple-600 flex flex-shrink-0 items-center justify-center shadow">
+                      <User className="w-5 h-5 text-white" />
+                    </div>
+                  )}
+                  <div className="flex-1 overflow-hidden min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm font-semibold text-slate-200">
+                          {msg.role === 'assistant' ? 'AI Assistant' : msg.role === 'system' ? 'System' : 'You'}
+                        </span>
+                        {msg.createdAt && (
+                          <span className="text-xs text-slate-500 font-medium">
+                            {formatTime(msg.createdAt)}
+                          </span>
+                        )}
                       </div>
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-purple-600 flex flex-shrink-0 items-center justify-center shadow">
-                        <User className="w-5 h-5 text-white" />
+
+                      {/* Database Message Details Trigger */}
+                      <button
+                        onClick={() => setDetailModalMsg(msg)}
+                        title="View Database Message Metrics & Token Details"
+                        className="text-slate-500 hover:text-blue-400 opacity-80 hover:opacity-100 transition-opacity p-1"
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="prose prose-invert prose-sm max-w-none text-[#D4D4D8] leading-relaxed break-words">
+                      <FormattedMarkdown content={msg.content} />
+                    </div>
+
+                    {/* Display tool execution tags directly under message if present */}
+                    {msg.toolCalls && msg.toolCalls.length > 0 && (
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {msg.toolCalls.map((tc, tIdx) => (
+                          <span
+                            key={tIdx}
+                            className="inline-flex items-center space-x-1 text-[11px] px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                          >
+                            <Wrench className="w-3 h-3" />
+                            <span>{tc.tool}</span>
+                          </span>
+                        ))}
                       </div>
                     )}
-                    <div className="flex-1 overflow-hidden min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm font-semibold text-slate-200">
-                            {msg.role === 'assistant' ? 'AI Assistant' : msg.role === 'system' ? 'System' : 'You'}
-                          </span>
-                          {msg.createdAt && (
-                            <span className="text-xs text-slate-500 font-medium">
-                              {formatTime(msg.createdAt)}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Database Message Details Trigger */}
-                        <button
-                          onClick={() => setDetailModalMsg(msg)}
-                          title="View Database Message Metrics & Token Details"
-                          className="text-slate-500 hover:text-blue-400 opacity-80 hover:opacity-100 transition-opacity p-1"
-                        >
-                          <Info className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      <div className="prose prose-invert prose-sm max-w-none text-[#D4D4D8] leading-relaxed break-words">
-                        <FormattedMarkdown content={msg.content} />
-                      </div>
-
-                      {/* Display tool execution tags directly under message if present */}
-                      {msg.toolCalls && msg.toolCalls.length > 0 && (
-                        <div className="mt-2.5 flex flex-wrap gap-1.5">
-                          {msg.toolCalls.map((tc, tIdx) => (
-                            <span
-                              key={tIdx}
-                              className="inline-flex items-center space-x-1 text-[11px] px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                            >
-                              <Wrench className="w-3 h-3" />
-                              <span>{tc.tool}</span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
                   </div>
-                ))
-              )}
-              <div ref={bottomRef} />
-            </div>
+                </div>
+              ))
+            )}
+            <div ref={bottomRef} />
           </div>
+        </div>
 
         {/* Input Area */}
         <div className="p-4 md:p-6 bg-[#1E1E1E]">
