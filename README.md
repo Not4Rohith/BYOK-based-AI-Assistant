@@ -1,45 +1,92 @@
 # BYOK-Based Personal AI Task Assistant
 
-A cross-platform (Mobile & Desktop) AI-powered personal task manager built with React, Vite, Tailwind CSS, Tauri v2, and MongoDB Atlas.
+A cross-platform (Desktop & Mobile) AI-powered personal task manager and agentic assistant built with React, Vite, Tailwind CSS, Tauri v2, LangChain/LangGraph, and MongoDB Atlas.
 
 ---
 
-> [!WARNING]
-> **Archival Notice: External Node.js/Express Backend Attempt**
-> This repository represents a **failed architectural attempt** at relying on an external Node.js/Express REST server process for mobile and desktop sync.
-> 
-> ### Why the External Express Backend Failed:
-> 1. **Android Networking Friction**: Android WebViews require dynamic IP configurations (`http://10.0.2.2:3001/api` for emulators, local Wi-Fi IPs for physical devices) resulting in frequent `net::ERR_CONNECTION_REFUSED` errors when changing network interfaces.
-> 2. **Network Switching Fragility**: Swapping Wi-Fi networks or switching to 5G/LTE sever TCP sockets (`ECONNRESET`) to MongoDB Atlas, requiring external public tunnels (`localtunnel` / Cloudflare Tunnels) or cloud hosting to remain accessible.
-> 3. **Process Management Overhead**: Requiring a separate Node.js server to run alongside native mobile apps defeats the native, self-contained mobile experience.
+## ⚡ Future Roadmap: High-Performance Rust Core Coming Soon!
+A **higher-performance, native Rust-powered version** (`src-tauri/src`) is currently under active development. It will embed the backend engine, native IPC commands (`invoke()`), and async database/AI clients directly into the native binary for zero-latency, ultra-lightweight execution across Desktop and Mobile!
 
 ---
 
-## 🚀 Future Roadmap: Native Rust Backend Migration
+## 🚀 Key Features
 
-The application backend is being **migrated natively to Rust** (`src-tauri/src`) embedded directly within Tauri v2:
-
-1. **Embedded Native Binary**: Rust code compiles directly into the Android shared library (`libapp_lib.so` inside the APK) and Desktop binary.
-2. **In-Process Native IPC (`invoke()`)**: Replaces external HTTP API requests with native Tauri IPC commands (`invoke('get_tasks')`, `invoke('chat_with_ai')`), eliminating HTTP port bindings, network latency, and IP configuration issues.
-3. **Native Rust MongoDB & OpenRouter Integration**: Utilizing official async Rust crates (`mongodb`, `tokio`, `reqwest`, `serde`) directly on the device for 100% self-contained, 24/7 offline and online execution.
-
----
-
-## 📱 Current Features (Frontend & UI)
-- **Bring Your Own Key (BYOK)**: Supports user-provided OpenRouter and Gemini API keys.
-- **Mobile & Desktop UI**: Sleek dark-mode interface with task lists, subtask management, long-term goals, and AI memory tiers.
-- **Autonomous AI Agent**: LangGraph-inspired agent state machine with automated tool execution (`get_today_agenda`, `create_task`, `auto_memory_extraction`).
-- **MongoDB Atlas Integration**: Direct data model mapping for Tasks, TaskLists, Goals, Memories, and Chat Sessions.
+- **Bring Your Own Key (BYOK)**: Full control over your AI provider credentials (OpenRouter, Gemini, Grok).
+- **Laya Decision Router**: Fast, token-efficient AI decision router that dynamically selects relevant tools and prompt modules (`SINGLE_TOOL`, `SIMPLE_LLM`, `AGENT`).
+- **One-Time Transient Scratchpad**: Token-efficient confirmation flows (e.g., bulk task deletion, high-risk operations) without wasting chat tokens on heavy history dumps.
+- **Autonomous AI Agent**: LangGraph-inspired agent engine with tool calling (`get_tasks`, `get_lists`, `create_task`, `complete_task`, `delete_all_tasks`, `replan_day`, `auto_memory_extraction`).
+- **Dynamic Model Selection**: Select any AI model dynamically (OpenRouter, Gemini, Grok) directly in the app.
+- **MongoDB Atlas Integration**: Cloud sync for tasks, categories, goals, long-term memories, and chat sessions.
 
 ---
 
-## 🛠 Project Structure
+## 🛠️ Setup & Deployment Guide
+
+Follow this guide to host your backend and configure the application settings directly within the app UI.
+
+### Step 1: Host the Backend (e.g., on Render)
+
+You can easily host the backend on [Render](https://render.com) or any Node.js hosting platform.
+
+1. **Repository Link**: Fork or push this repository to GitHub.
+2. **Create New Web Service**:
+   - Log in to your Render Dashboard.
+   - Click **New +** -> **Web Service**.
+   - Connect your GitHub repository.
+3. **Build & Start Commands**:
+   - **Environment**: Node
+   - **Build Command**: `npm run build:backend`
+   - **Start Command**: `npm run dev:backend` (or `node backend/dist/server.js`)
+4. **Deployed Backend URL**:
+   - Render will provide a public HTTPS URL (e.g., `https://your-app-backend.onrender.com`).
+
+---
+
+### Step 2: Configure Settings Directly in the App UI
+
+Launch the desktop or mobile application. Click the ⚙️ **Settings** tab in the sidebar to configure your connection strings and API credentials:
+
+1. **Backend Server URL**:
+   - Enter your deployed Render backend URI (e.g., `https://your-app-backend.onrender.com` or `http://localhost:3001` for local development).
+2. **MongoDB Connection String**:
+   - Add your MongoDB Atlas connection string (e.g., `mongodb+srv://user:password@cluster.mongodb.net/ai_task_manager`).
+   - Click **Save Database Configuration**.
+3. **API Keys (BYOK)**:
+   - Enter your **OpenRouter API Key** (`sk-or-v1-...`), **Gemini API Key**, or **Grok API Key**.
+4. **Model Selection**:
+   - Select your preferred model directly from the dropdown (e.g., `google/gemini-2.5-flash`, `openrouter/free`, `anthropic/claude-3.5-sonnet`, `meta-llama/llama-3.1-8b-instruct`).
+5. **System Prompt & Daily Schedule**:
+   - Customize your personal system prompt and working schedule directly inside the UI.
+
+---
+
+## 📂 Project Structure
+
 ```
 ├── apps/
-│   └── desktop/          # Frontend React app & Tauri v2 native mobile/desktop app
-├── backend/              # Node.js Express server (Legacy attempt - being migrated to Rust)
+│   └── desktop/          # Frontend React app & Tauri v2 native application
+├── backend/              # Node.js backend service (Express, LangChain, MongoDB)
 ├── packages/
 │   └── shared-types/     # Shared TypeScript interfaces & data models
-├── app-debug.apk         # Compiled Android debug APK
-└── render.yaml           # Legacy cloud deployment configuration
+├── render.yaml           # Cloud deployment configuration for Render
+└── README.md
 ```
+
+---
+
+## 💻 Local Development
+
+1. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Run Desktop & Backend Concurrently**:
+   ```bash
+   npm run start:desktop
+   ```
+
+3. **Build Desktop & Backend Binaries**:
+   ```bash
+   npm run bundle:desktop
+   ```

@@ -178,6 +178,8 @@ export class AIService {
         dailySchedule: this.config.dailySchedule,
         localTime,
         openrouterApiKey: this.config.openrouter?.apiKey,
+        defaultModel: this.config.openrouter?.defaultModel,
+        sessionId: activeSession._id,
       });
 
       // Safety guard: Elevate SIMPLE_LLM to AGENT if action tools are present or prompt implies task creation/action

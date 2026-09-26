@@ -48,6 +48,8 @@ export interface LayaRouterOptions {
   dailySchedule?: string;
   localTime?: string;
   openrouterApiKey?: string;
+  defaultModel?: string;
+  sessionId?: string;
 }
 
 export interface LayaTelemetryMetrics {

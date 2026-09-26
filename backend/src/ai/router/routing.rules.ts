@@ -1,4 +1,5 @@
 import { LayaRoutingResult } from './routing.types.js';
+import { transientScratchpadService } from '../../services/scratchpad.service.js';
 
 // Semantic Concept Dictionaries for Intent Normalization
 const CREATE_VERBS = [
@@ -26,7 +27,7 @@ const DELETE_VERBS = [
 ];
 
 export class LayaRuleEngine {
-  public evaluateRules(prompt: string): LayaRoutingResult | null {
+  public evaluateRules(prompt: string, sessionId?: string): LayaRoutingResult | null {
     const p = prompt.trim();
     const cleanPrompt = p.replace(/[.!?]+$/, '').trim();
     const lower = cleanPrompt.toLowerCase();
@@ -93,18 +94,25 @@ export class LayaRuleEngine {
       lower === 'delete everything';
 
     if (isBulkDelete) {
-      return {
-        route: 'SINGLE_TOOL',
+      // Set one-time transient scratchpad state for confirmation
+      transientScratchpadService.setPendingAction(sessionId || 'default', {
         operation: 'delete_all_tasks',
+        tools: ['delete_all_tasks'],
+        promptModules: ['taskDeletion'],
+        context: ['TASKS'],
+      });
+
+      return {
+        route: 'SIMPLE_LLM',
         confidence: 0.98,
         reasoningLevel: 'NONE',
         promptModules: ['taskDeletion'],
-        tools: ['delete_all_tasks'],
+        tools: [],
         context: ['TASKS'],
         history: false,
         memory: false,
-        requiresClarification: false,
-        reason: 'Direct bulk task deletion command',
+        requiresClarification: true,
+        reason: 'Asking for confirmation via transient scratchpad before bulk task deletion',
         parameters: {},
       };
     }
@@ -119,18 +127,24 @@ export class LayaRuleEngine {
           if (
             ['all tasks', 'all', 'all my tasks', 'everything', 'every task', 'all of my tasks', 'all of the tasks'].includes(target)
           ) {
-            return {
-              route: 'SINGLE_TOOL',
+            transientScratchpadService.setPendingAction(sessionId || 'default', {
               operation: 'delete_all_tasks',
+              tools: ['delete_all_tasks'],
+              promptModules: ['taskDeletion'],
+              context: ['TASKS'],
+            });
+
+            return {
+              route: 'SIMPLE_LLM',
               confidence: 0.98,
               reasoningLevel: 'NONE',
               promptModules: ['taskDeletion'],
-              tools: ['delete_all_tasks'],
+              tools: [],
               context: ['TASKS'],
               history: false,
               memory: false,
-              requiresClarification: false,
-              reason: 'Bulk task deletion request',
+              requiresClarification: true,
+              reason: 'Asking for confirmation via transient scratchpad before bulk task deletion',
               parameters: {},
             };
           }
