@@ -379,6 +379,10 @@ replanDay: () =>
     const cached = offlineCache.getCachedAIConfig();
     const serverConfig = await fetchJson<AIProviderConfig>(`${getApiBaseUrl()}/settings/config`);
     if (serverConfig) {
+      const serverNeedsSync =
+        (!serverConfig.mongoUri && cached?.mongoUri) ||
+        (!serverConfig.openrouter?.apiKey && cached?.openrouter?.apiKey);
+
       // Merge cached local keys if server didn't have them
       const merged: AIProviderConfig = {
         ...serverConfig,
@@ -404,6 +408,16 @@ replanDay: () =>
         mongoUri: cached?.mongoUri || serverConfig.mongoUri || '',
       };
       offlineCache.setCachedAIConfig(merged);
+
+      // Automatically sync cached MongoDB URI and API keys back to backend if server lost settings on restart
+      if (serverNeedsSync) {
+        console.info('[AI Config] Auto-syncing client cached settings (MongoDB URI & API keys) to backend server after container restart...');
+        fetchJson<AIProviderConfig>(`${getApiBaseUrl()}/settings/config`, {
+          method: 'POST',
+          body: JSON.stringify(merged),
+        }).catch((err) => console.warn('[AI Config] Auto-sync to backend failed:', err));
+      }
+
       return merged;
     }
     return cached;

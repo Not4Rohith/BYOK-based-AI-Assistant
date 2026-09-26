@@ -50,7 +50,7 @@ export class AIService {
   }
 
   private loadConfig(): void {
-    const envMongoUri = process.env.MONGODB_URI || '';
+    const envMongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || '';
     const envOpenRouterKey = process.env.OPENROUTER_API_KEY || '';
 
     try {
