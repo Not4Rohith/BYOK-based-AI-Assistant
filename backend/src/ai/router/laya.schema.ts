@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const layaRoutingSchema = z.object({
-  route: z.enum(['DIRECT', 'SIMPLE_LLM', 'AGENT']).describe('The primary execution route for the user prompt'),
+  route: z.enum(['SIMPLE_LLM', 'SINGLE_TOOL', 'AGENT']).describe('The primary execution route for the user prompt'),
   operation: z.string().optional().describe('Specific operation name if direct or single tool (e.g. complete_task, create_task, get_tasks)'),
   confidence: z.number().min(0).max(1).describe('Confidence score between 0.0 and 1.0'),
   reasoningLevel: z.enum(['NONE', 'LOW', 'MEDIUM', 'HIGH']).describe('Level of reasoning required'),

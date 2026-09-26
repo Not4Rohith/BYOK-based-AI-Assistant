@@ -1,4 +1,4 @@
-export type RouteType = 'DIRECT' | 'SIMPLE_LLM' | 'AGENT';
+export type RouteType = 'SIMPLE_LLM' | 'SINGLE_TOOL' | 'AGENT';
 
 export type ReasoningLevel = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH';
 

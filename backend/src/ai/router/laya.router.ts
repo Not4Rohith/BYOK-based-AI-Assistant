@@ -23,13 +23,13 @@ export class LayaRouter {
         const classifierPrompt = `You are Laya, an ultra-fast typed decision router for an AI Task Manager.
 Analyze the user prompt and respond with ONLY a raw valid JSON object without codeblocks:
 {
-  "route": "DIRECT" | "SIMPLE_LLM" | "AGENT",
+  "route": "SIMPLE_LLM" | "SINGLE_TOOL" | "AGENT",
   "operation": "get_tasks" | "create_task" | "update_task" | "complete_task" | "delete_task" | "delete_all_tasks" | "replan_day" | "get_lists" | "create_list" | "none",
   "confidence": 0.85,
   "reasoningLevel": "NONE" | "LOW" | "MEDIUM" | "HIGH",
   "promptModules": ["base", "taskQuery", "taskMutation", "taskCreation", "taskDeletion", "scheduling", "prioritization"],
-  "tools": ["get_tasks", "complete_task", "create_task", "delete_task", "delete_all_tasks", "replan_day"],
-  "context": ["TASKS", "TODAY_AGENDA", "USER_PREFERENCES"],
+  "tools": ["get_tasks", "get_lists", "complete_task", "create_task", "delete_task", "delete_all_tasks", "replan_day"],
+  "context": ["TASKS", "TASK_LISTS", "TODAY_AGENDA", "USER_PREFERENCES"],
   "history": false,
   "memory": false,
   "requiresClarification": false,
@@ -38,9 +38,11 @@ Analyze the user prompt and respond with ONLY a raw valid JSON object without co
 }
 
 CRITICAL ROUTING RULES:
-1. If the user prompt asks to delete all tasks, clear all tasks, or delete everything, set route to DIRECT and operation to "delete_all_tasks".
-2. If the user prompt asks to CREATE, ADD, EDIT, COMPLETE, DELETE, or REPLAN tasks/categories (e.g. "add tasks", "create task", "delete task"), set route to AGENT or DIRECT. NEVER route task creation/mutation to SIMPLE_LLM.
-3. SIMPLE_LLM is strictly reserved for greetings ("hello", "hi"), casual conversation, and pure informational advice where NO tool actions are performed.
+1. If the user prompt asks to show, list, or view task lists/categories (e.g. "list all lists", "show lists", "categories"), set route to SINGLE_TOOL and operation to "get_lists".
+2. If the user prompt asks to delete all tasks, clear all tasks, or delete everything, set route to SINGLE_TOOL and operation to "delete_all_tasks".
+3. If the user prompt is a single ambiguous word (e.g. "all", "delete", "list", "show", "what"), DO NOT route to SINGLE_TOOL or call get_tasks. Set route to SIMPLE_LLM, operation to "none", and tools to [].
+4. If the user prompt asks to CREATE, ADD, EDIT, COMPLETE, DELETE, or REPLAN tasks/categories, set route to AGENT or SINGLE_TOOL.
+5. SIMPLE_LLM is strictly reserved for greetings ("hello", "hi"), casual conversation, ambiguous short words, and pure informational advice where NO tool actions are performed.
 
 User Prompt: "${trimmed}"`;
 
@@ -66,7 +68,7 @@ User Prompt: "${trimmed}"`;
           const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
           const parsed = JSON.parse(cleaned) as LayaRoutingResult;
 
-          if (parsed && (parsed.route === 'DIRECT' || parsed.route === 'SIMPLE_LLM' || parsed.route === 'AGENT')) {
+          if (parsed && (parsed.route === 'SINGLE_TOOL' || parsed.route === 'SIMPLE_LLM' || parsed.route === 'AGENT')) {
             console.log(`[LayaRouter] 🧠 Semantic LLM Classification: Route=${parsed.route} | Operation=${parsed.operation || 'none'} | Confidence=${parsed.confidence}`);
             return {
               route: parsed.route,

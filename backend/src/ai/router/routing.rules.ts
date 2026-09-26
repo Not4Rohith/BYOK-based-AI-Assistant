@@ -31,19 +31,19 @@ export class LayaRuleEngine {
     const cleanPrompt = p.replace(/[.!?]+$/, '').trim();
     const lower = cleanPrompt.toLowerCase();
 
-    // 1. Simple Greetings & Casual Chat
-    if (/^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you)[\s!?.]*$/i.test(p)) {
+    // 1. Simple Greetings, Casual Chat & Ambiguous Single Words
+    if (/^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you|all|what|help|do)[\s!?.]*$/i.test(p)) {
       return {
         route: 'SIMPLE_LLM',
-        confidence: 1.0,
+        confidence: 0.9,
         reasoningLevel: 'NONE',
         promptModules: ['base'],
         tools: [],
         context: [],
-        history: false,
+        history: true,
         memory: false,
         requiresClarification: false,
-        reason: 'Casual greeting or non-task conversational prompt',
+        reason: 'Casual greeting or ambiguous single-word prompt',
         parameters: {},
       };
     }
@@ -63,7 +63,7 @@ export class LayaRuleEngine {
           const taskTitle = rawTarget.replace(/^["']|["']$/g, '');
           if (taskTitle.length > 0) {
             return {
-              route: 'DIRECT',
+              route: 'SINGLE_TOOL',
               operation: 'complete_task',
               confidence: 0.98,
               reasoningLevel: 'NONE',
@@ -94,7 +94,7 @@ export class LayaRuleEngine {
 
     if (isBulkDelete) {
       return {
-        route: 'DIRECT',
+        route: 'SINGLE_TOOL',
         operation: 'delete_all_tasks',
         confidence: 0.98,
         reasoningLevel: 'NONE',
@@ -120,7 +120,7 @@ export class LayaRuleEngine {
             ['all tasks', 'all', 'all my tasks', 'everything', 'every task', 'all of my tasks', 'all of the tasks'].includes(target)
           ) {
             return {
-              route: 'DIRECT',
+              route: 'SINGLE_TOOL',
               operation: 'delete_all_tasks',
               confidence: 0.98,
               reasoningLevel: 'NONE',
@@ -137,7 +137,7 @@ export class LayaRuleEngine {
 
           if (target === 'that' || target === 'it' || target.length === 0) {
             return {
-              route: 'DIRECT',
+              route: 'SINGLE_TOOL',
               operation: 'delete_task',
               confidence: 0.5,
               reasoningLevel: 'LOW',
@@ -152,7 +152,7 @@ export class LayaRuleEngine {
             };
           }
           return {
-            route: 'DIRECT',
+            route: 'SINGLE_TOOL',
             operation: 'delete_task',
             confidence: 0.95,
             reasoningLevel: 'NONE',
@@ -169,10 +169,36 @@ export class LayaRuleEngine {
       }
     }
 
-    // 4. Semantic Task Query & Agenda Intent
-    if (/^(show|get|list|view|display|fetch|retrieve|see)\s+(?:my\s+)?(?:all\s+)?tasks$/i.test(p) || lower === 'tasks' || lower === 'my tasks') {
+    // 4. Semantic Task List / Categories Query Intent
+    if (
+      /^(show|get|list|view|display|fetch|retrieve|see)\s+(?:my\s+)?(?:all\s+)?(?:lists|categories|task\s+lists)$/i.test(cleanPrompt) ||
+      lower === 'lists' ||
+      lower === 'my lists' ||
+      lower === 'all lists' ||
+      lower === 'categories' ||
+      lower === 'my categories' ||
+      lower === 'all categories'
+    ) {
       return {
-        route: 'DIRECT',
+        route: 'SINGLE_TOOL',
+        operation: 'get_lists',
+        confidence: 0.98,
+        reasoningLevel: 'NONE',
+        promptModules: ['taskQuery'],
+        tools: ['get_lists'],
+        context: ['TASK_LISTS'],
+        history: false,
+        memory: false,
+        requiresClarification: false,
+        reason: 'Semantic task list categories retrieval request',
+        parameters: {},
+      };
+    }
+
+    // 4.5. Semantic Task Query & Agenda Intent
+    if (/^(show|get|list|view|display|fetch|retrieve|see)\s+(?:my\s+)?(?:all\s+)?tasks$/i.test(cleanPrompt) || lower === 'tasks' || lower === 'my tasks') {
+      return {
+        route: 'SINGLE_TOOL',
         operation: 'get_tasks',
         confidence: 0.98,
         reasoningLevel: 'NONE',
@@ -189,7 +215,7 @@ export class LayaRuleEngine {
 
     if (/^(show|get|view|display|fetch)\s+(?:my\s+)?(?:today'?s?\s+)?agenda$/i.test(p) || lower === 'agenda' || lower === "today's agenda") {
       return {
-        route: 'DIRECT',
+        route: 'SINGLE_TOOL',
         operation: 'get_today_agenda',
         confidence: 0.98,
         reasoningLevel: 'NONE',
@@ -239,7 +265,7 @@ export class LayaRuleEngine {
       const rawTitle = createMatch[1].trim().replace(/^["']|["']$/g, '');
       if (rawTitle.length > 0 && !rawTitle.toLowerCase().startsWith('tasks')) {
         return {
-          route: 'DIRECT',
+          route: 'SINGLE_TOOL',
           operation: 'create_task',
           confidence: 0.95,
           reasoningLevel: 'NONE',
@@ -258,7 +284,7 @@ export class LayaRuleEngine {
     // 7. Direct Replanning Intent
     if (/^(replan\s+my\s+day|replan\s+schedule|auto\s+replan|reschedule\s+today)$/i.test(p)) {
       return {
-        route: 'DIRECT',
+        route: 'SINGLE_TOOL',
         operation: 'replan_day',
         confidence: 0.95,
         reasoningLevel: 'LOW',

@@ -10,7 +10,6 @@ import { dbConnection } from '../db/connection.js';
 import { chatStorageService } from './chatStorage.service.js';
 import { langGraphAgentEngine } from '../ai/langgraph.agent.js';
 import { layaRouter } from '../ai/router/laya.router.js';
-import { directExecutionHandler } from '../ai/router/direct.executor.js';
 import { contextSelector } from '../ai/context/selector.js';
 import { composeSystemPrompt } from '../ai/prompts/composer.js';
 import { LayaTelemetryMetrics } from '../ai/router/routing.types.js';
@@ -212,24 +211,31 @@ export class AIService {
         latencyMs: 0,
       };
 
-      // ROUTE 1 — DIRECT EXECUTION (Deterministic TypeScript, 0 LLM tokens, 0 LangGraph iterations)
-      if (decision.route === 'DIRECT') {
-        console.log(`[AIService] ⚡ Route DIRECT selected (Operation=${decision.operation}). Executing TypeScript handler...`);
-        const directRes = await directExecutionHandler.execute(decision, this.taskService);
-        responseText = directRes.responseText;
-        toolCalls = [...toolCalls, ...directRes.toolCallsExecuted];
+      // ROUTE 1 — SINGLE_TOOL & AGENT (AI execution with selected tools via LangGraph engine)
+      if (decision.route === 'SINGLE_TOOL' || decision.route === 'AGENT') {
+        console.log(`[AIService] 🛠️ Route ${decision.route} selected (Operation=${decision.operation || 'none'}, Tools=[${decision.tools.join(', ')}]). Executing AI tool runner...`);
+        const agentResult = await langGraphAgentEngine.processMessage(
+          userPrompt,
+          chatHistory,
+          this.config,
+          this.taskService,
+          localTime,
+          decision.tools,
+          decision.promptModules,
+          decision.context
+        );
+        responseText = agentResult.responseText;
+        toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
         telemetry.latencyMs = Date.now() - startTime;
         agentMetadata = {
-          model: 'laya/direct_execution',
-          provider: 'typescript_engine',
-          tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          ...(agentResult.metadata || {}),
           telemetry,
         };
       }
 
-      // ROUTE 2 — SIMPLE_LLM (Single LLM call, selective prompt modules, selective tools, no LangGraph loop)
+      // ROUTE 2 — SIMPLE_LLM (Conversational single LLM call with 0 tools)
       else if (decision.route === 'SIMPLE_LLM') {
-        console.log(`[AIService] 🧠 Route SIMPLE_LLM selected (Modules=[${decision.promptModules.join(', ')}], Tools=[${decision.tools.join(', ')}])...`);
+        console.log(`[AIService] 🧠 Route SIMPLE_LLM selected (Modules=[${decision.promptModules.join(', ')}])...`);
         telemetry.llmCalls = 1;
 
         const openrouterKey = (this.config.openrouter?.apiKey || '').trim();
@@ -282,7 +288,7 @@ export class AIService {
               model: modelToUse,
               messages: payloadMessages,
               temperature: 0.7,
-              max_tokens: 150,
+              max_tokens: 250,
             }),
           });
 
@@ -303,33 +309,31 @@ export class AIService {
               telemetry,
             };
           } else {
-            decision.route = 'AGENT'; // Fallback to Agent if API returned non-200
+            const agentResult = await langGraphAgentEngine.processMessage(
+              userPrompt,
+              chatHistory,
+              this.config,
+              this.taskService,
+              localTime,
+              []
+            );
+            responseText = agentResult.responseText;
+            toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
+            agentMetadata = agentResult.metadata || {};
           }
         } else {
-          decision.route = 'AGENT';
+          const agentResult = await langGraphAgentEngine.processMessage(
+            userPrompt,
+            chatHistory,
+            this.config,
+            this.taskService,
+            localTime,
+            []
+          );
+          responseText = agentResult.responseText;
+          toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
+          agentMetadata = agentResult.metadata || {};
         }
-      }
-
-      // ROUTE 3 — AGENT (Full LangGraph agent loop with selective tools and prompt modules)
-      if (decision.route === 'AGENT' || !responseText) {
-        console.log(`[AIService] 🤖 Route AGENT selected (Modules=[${decision.promptModules.join(', ')}], Tools=[${decision.tools.join(', ')}])...`);
-        const agentResult = await langGraphAgentEngine.processMessage(
-          userPrompt,
-          chatHistory,
-          this.config,
-          this.taskService,
-          localTime,
-          decision.tools,
-          decision.promptModules,
-          decision.context
-        );
-        responseText = agentResult.responseText;
-        toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
-        telemetry.latencyMs = Date.now() - startTime;
-        agentMetadata = {
-          ...(agentResult.metadata || {}),
-          telemetry,
-        };
       }
     } catch (err) {
       console.warn('[AIService] Laya routing execution failed, executing safe fallback agent:', err);
