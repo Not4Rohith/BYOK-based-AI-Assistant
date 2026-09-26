@@ -5,10 +5,10 @@ export const getApiBaseUrl = (): string => {
   return offlineCache.getServerUrl();
 };
 
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T | null> {
+async function fetchJson<T>(url: string, options?: RequestInit, timeoutMs = 10000): Promise<T | null> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second request timeout
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
@@ -33,7 +33,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T | nul
       try {
         const fallbackUrl = url.replace(currentBase, candidateBase);
         const controller2 = new AbortController();
-        const timeoutId2 = setTimeout(() => controller2.abort(), 5000);
+        const timeoutId2 = setTimeout(() => controller2.abort(), timeoutMs);
         const res2 = await fetch(fallbackUrl, {
           headers: { 'Content-Type': 'application/json' },
           signal: controller2.signal,
@@ -218,10 +218,23 @@ export const api = {
   getDailySummary: () => fetchJson<{ summary: string }>(`${getApiBaseUrl()}/chat/daily-summary`),
 
   sendChatMessage: async (message: string, sessionId?: string, localTime?: string) => {
-    const serverRes = await fetchJson<{ userMsg: ChatMessage; aiMsg: ChatMessage }>(`${getApiBaseUrl()}/chat`, {
-      method: 'POST',
-      body: JSON.stringify({ message, sessionId, localTime }),
-    });
+    const cachedConf = offlineCache.getCachedAIConfig();
+    const openRouterKey = (cachedConf?.openrouter?.apiKey || '').trim();
+
+    // 1. Send request to backend with 60s timeout for LangGraph agent processing
+    const serverRes = await fetchJson<{ userMsg: ChatMessage; aiMsg: ChatMessage }>(
+      `${getApiBaseUrl()}/chat`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          message,
+          sessionId,
+          localTime,
+          openrouterApiKey: openRouterKey,
+        }),
+      },
+      60000 // 60 second timeout for AI operations
+    );
     if (serverRes) return serverRes;
 
     const now = new Date().toISOString();
@@ -234,32 +247,31 @@ export const api = {
       createdAt: now,
     };
 
-    // Direct Mobile Device Fallback: Execute via OpenRouter API if backend server is offline/unreachable
+    // 2. Direct Mobile/Client Fallback: Execute via OpenRouter API directly if backend server is offline/unreachable
     try {
-      const config = offlineCache.getCachedAIConfig();
-      const openRouterKey = (config?.openrouter?.apiKey || '').trim();
-      const selectedModel = config?.openrouter?.defaultModel || 'openai/gpt-4o-mini';
-
       if (openRouterKey) {
-        const sysPrompt = config?.systemPrompt || 'You are an intelligent AI task management assistant.';
+        console.info('[Client Fallback] Backend server unreachable. Executing direct OpenRouter API fallback...');
+        const sysPrompt = cachedConf?.systemPrompt || 'You are an intelligent AI task management assistant.';
         const candidateModels = [
-          config?.openrouter?.defaultModel,
-          ...(config?.openrouter?.fallbackModels || []),
+          cachedConf?.openrouter?.defaultModel,
+          ...(cachedConf?.openrouter?.fallbackModels || []),
+          'google/gemini-2.5-flash',
+          'openai/gpt-4o-mini',
         ]
-          .filter(Boolean)
-          .map((m) => m!.replace(/^~/, '').trim())
+          .filter((m): m is string => Boolean(m && typeof m === 'string'))
+          .map((m) => m.replace(/^~/, '').trim())
           .filter((m, i, arr) => m.length > 0 && arr.indexOf(m) === i);
-
-        if (candidateModels.length === 0) {
-          candidateModels.push(selectedModel);
-        }
 
         let lastErrStatus = 402;
         let lastErrText = '';
 
-        for (const candidateModel of candidateModels) {
+        for (let idx = 0; idx < candidateModels.length; idx++) {
+          const candidateModel = candidateModels[idx];
+          console.log(`[Client Fallback] Trying model [${idx + 1}/${candidateModels.length}]: "${candidateModel}"`);
           const maxTokenTiers = [1000, 300, 150];
-          for (const tokens of maxTokenTiers) {
+
+          for (let tierIdx = 0; tierIdx < maxTokenTiers.length; tierIdx++) {
+            const tokens = maxTokenTiers[tierIdx];
             try {
               const apiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
@@ -293,11 +305,24 @@ export const api = {
                   metadata: { model: candidateModel },
                 };
 
+                console.log(`[Client Fallback] ✅ Direct OpenRouter request succeeded with model: "${candidateModel}"`);
                 return { userMsg, aiMsg };
               } else {
                 lastErrStatus = apiRes.status;
                 lastErrText = await apiRes.text();
-                console.warn(`[Client] Model "${candidateModel}" (tokens=${tokens}) returned ${apiRes.status}:`, lastErrText);
+                console.warn(`[Client Fallback] Model "${candidateModel}" (tokens=${tokens}) returned ${apiRes.status}:`, lastErrText);
+
+                // Parse OpenRouter error for specific max affordable tokens
+                const affordMatch = lastErrText.match(/can\s+only\s+afford\s+(\d+)/i);
+                if (affordMatch && affordMatch[1]) {
+                  const maxAfford = Math.floor(parseInt(affordMatch[1], 10) * 0.9);
+                  if (maxAfford > 30 && maxAfford < tokens) {
+                    console.info(`[Client Fallback] ⚡ TOKEN RECOVERY: OpenRouter max affordable tokens = ${maxAfford}. Retrying...`);
+                    if (!maxTokenTiers.slice(tierIdx + 1).includes(maxAfford)) {
+                      maxTokenTiers.splice(tierIdx + 1, 0, maxAfford);
+                    }
+                  }
+                }
 
                 // If NOT a 402 / max_tokens credit error, stop token tier retries for this model and move to NEXT candidate model
                 if (!lastErrText.includes('402') && !lastErrText.includes('max_tokens') && !lastErrText.includes('credits')) {
@@ -305,9 +330,14 @@ export const api = {
                 }
               }
             } catch (err) {
-              console.warn(`[Client] Model "${candidateModel}" fetch error:`, err);
+              console.warn(`[Client Fallback] Model "${candidateModel}" fetch error:`, err);
               break;
             }
+          }
+
+          if (idx < candidateModels.length - 1) {
+            const nextModel = candidateModels[idx + 1];
+            console.warn(`[Client Fallback] 🔄 FALLBACK TRIGGERED: Candidate model "${candidateModel}" failed. Falling back to next candidate model "${nextModel}"...`);
           }
         }
 
@@ -330,7 +360,7 @@ export const api = {
         return { userMsg, aiMsg };
       }
     } catch (err) {
-      console.warn('[Client] Direct chat fallback failed:', err);
+      console.warn('[Client Fallback] Direct chat fallback failed:', err);
       const aiMsg: ChatMessage = {
         _id: `msg_a_${Date.now() + 1}`,
         sessionId: sessId,

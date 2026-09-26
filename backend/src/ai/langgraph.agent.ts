@@ -19,14 +19,17 @@ export class LangGraphAgentEngine {
       throw new Error('OpenRouter API key is missing. Please configure your key in Settings.');
     }
 
-    const candidateModels = [
+    const rawCandidates = [
       config.openrouter?.defaultModel,
       ...(config.openrouter?.fallbackModels || []),
-    ].filter((m, i, arr) => m && arr.indexOf(m) === i) as string[];
+      'google/gemini-2.5-flash',
+      'openai/gpt-4o-mini',
+    ];
 
-    if (candidateModels.length === 0) {
-      candidateModels.push('openai/gpt-4o-mini');
-    }
+    const candidateModels = rawCandidates
+      .filter((m): m is string => Boolean(m && typeof m === 'string'))
+      .map((m) => m.replace(/^~/, '').trim())
+      .filter((m, i, arr) => m.length > 0 && arr.indexOf(m) === i);
 
     const tools = createLangChainTools(taskService);
     const toolNode = new ToolNode(tools);
@@ -65,16 +68,17 @@ ${config.dailySchedule || 'No fixed schedule defined.'}
     let lastError: any = null;
 
     // Try candidate models in order (Fallback chain handling with dynamic token recovery)
-    for (const rawModelName of candidateModels) {
-      const modelName = rawModelName.replace(/^~/, '').trim();
-      if (!modelName) continue;
+    for (let candidateIdx = 0; candidateIdx < candidateModels.length; candidateIdx++) {
+      const modelName = candidateModels[candidateIdx];
+      console.log(`[LangGraphAgentEngine] 🤖 Candidate Model [${candidateIdx + 1}/${candidateModels.length}]: "${modelName}"`);
 
       // Try tokens limit candidate tiers (1000 -> 300 -> 150) to recover from OpenRouter 402 max_tokens credit limits
       const maxTokenTiers = [1000, 300, 150];
 
-      for (const currentMaxTokens of maxTokenTiers) {
+      for (let tierIdx = 0; tierIdx < maxTokenTiers.length; tierIdx++) {
+        const currentMaxTokens = maxTokenTiers[tierIdx];
         try {
-          console.log(`[LangGraphAgentEngine] Trying candidate model "${modelName}" (maxTokens=${currentMaxTokens})...`);
+          console.log(`[LangGraphAgentEngine] Executing graph with model "${modelName}" (maxTokens=${currentMaxTokens})...`);
 
           const llm = new ChatOpenAI({
             model: modelName,
@@ -227,7 +231,7 @@ ${config.dailySchedule || 'No fixed schedule defined.'}
             totalTokens,
           };
 
-          console.log(`[LangGraphAgentEngine] LangGraph completed successfully with model: ${modelName} (tokens: ${totalTokens})`);
+          console.log(`[LangGraphAgentEngine] ✅ LangGraph completed successfully with model: "${modelName}" (tokens: ${totalTokens})`);
           return {
             responseText: finalResponseText,
             toolCallsExecuted: executedToolLogs,
@@ -240,7 +244,19 @@ ${config.dailySchedule || 'No fixed schedule defined.'}
         } catch (err) {
           lastError = err;
           const errMsg = (err as Error).message || String(err);
-          console.warn(`[LangGraphAgentEngine] Model "${modelName}" (maxTokens=${currentMaxTokens}) failed in graph execution:`, errMsg);
+          console.warn(`[LangGraphAgentEngine] ❌ Model "${modelName}" (maxTokens=${currentMaxTokens}) failed in graph execution: ${errMsg}`);
+
+          // Parse OpenRouter error for specific max affordable tokens
+          const affordMatch = errMsg.match(/can\s+only\s+afford\s+(\d+)/i);
+          if (affordMatch && affordMatch[1]) {
+            const maxAfford = Math.floor(parseInt(affordMatch[1], 10) * 0.9);
+            if (maxAfford > 30 && maxAfford < currentMaxTokens) {
+              console.info(`[LangGraphAgentEngine] ⚡ TOKEN RECOVERY: OpenRouter specified max affordable tokens = ${maxAfford}. Inserting into retry queue...`);
+              if (!maxTokenTiers.slice(tierIdx + 1).includes(maxAfford)) {
+                maxTokenTiers.splice(tierIdx + 1, 0, maxAfford);
+              }
+            }
+          }
 
           // If the error is NOT related to 402 or max_tokens/credits, break token tier loop to try NEXT candidate model!
           if (!errMsg.includes('402') && !errMsg.includes('max_tokens') && !errMsg.includes('credits')) {
@@ -248,8 +264,14 @@ ${config.dailySchedule || 'No fixed schedule defined.'}
           }
         }
       }
+
+      if (candidateIdx < candidateModels.length - 1) {
+        const nextModelName = candidateModels[candidateIdx + 1];
+        console.warn(`[LangGraphAgentEngine] 🔄 FALLBACK TRIGGERED: Candidate model "${modelName}" failed across all token tiers. Falling back to next candidate model "${nextModelName}"...`);
+      }
     }
 
+    console.error(`[LangGraphAgentEngine] 🚨 ALL candidate models failed (${candidateModels.length} models tested). Last error: ${lastError?.message || lastError}`);
     throw new Error(`LangGraph execution failed across all configured models: ${lastError?.message || lastError}`);
   }
 }
