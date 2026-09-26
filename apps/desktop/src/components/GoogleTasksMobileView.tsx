@@ -38,6 +38,9 @@ interface GoogleTasksMobileViewProps {
   onOpenAIChat: () => void;
   onAskAI: (prompt: string) => void;
   onRefresh?: () => Promise<void> | void;
+  isConnected?: boolean;
+  isCheckingHealth?: boolean;
+  onCheckHealth?: () => void;
 }
 
 export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
@@ -57,6 +60,9 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
   onOpenAIChat,
   onAskAI,
   onRefresh,
+  isConnected = true,
+  isCheckingHealth = false,
+  onCheckHealth,
 }) => {
   const [activeListId, setActiveListId] = useState<string>('starred');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -97,6 +103,7 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
     if (isRefreshing) return;
     setIsRefreshing(true);
     try {
+      if (onCheckHealth) await onCheckHealth();
       if (onRefresh) await onRefresh();
     } catch {} finally {
       setTimeout(() => {
@@ -186,6 +193,32 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
         <h1 className="text-2xl font-normal text-[#E6E1E5] tracking-tight">Tasks</h1>
 
         <div className="flex items-center space-x-2">
+          {/* Render Connection Status Badge */}
+          <button
+            onClick={onCheckHealth}
+            title={
+              isConnected
+                ? 'Render Backend: Connected (Click to re-check)'
+                : 'Render Backend: Offline (Click to retry connection)'
+            }
+            className={`px-2.5 py-1 rounded-full text-xs font-medium flex items-center space-x-1.5 border transition-all ${
+              isConnected
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
+            }`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isCheckingHealth
+                  ? 'bg-amber-400 animate-ping'
+                  : isConnected
+                  ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)] animate-pulse'
+                  : 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]'
+              }`}
+            />
+            <span className="text-[11px] font-semibold">{isConnected ? 'Render' : 'Offline'}</span>
+          </button>
+
           {/* Refresh Button */}
           <button
             onClick={triggerRefresh}

@@ -450,6 +450,26 @@ export const api = {
       method: 'DELETE',
     }),
 
+  checkHealth: async (): Promise<boolean> => {
+    try {
+      const url = `${getApiBaseUrl()}/health`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const json = await res.json();
+        return json.status === 'ok' || json.status === 'healthy';
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  },
+
   flushSync: () => offlineCache.flush(getApiBaseUrl()),
 };
 

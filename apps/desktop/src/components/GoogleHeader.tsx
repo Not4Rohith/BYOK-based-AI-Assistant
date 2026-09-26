@@ -1,16 +1,22 @@
 import React from 'react';
-import { Menu, HelpCircle, Grid, Sparkles, User } from 'lucide-react';
+import { Menu, RefreshCw } from 'lucide-react';
 
 interface GoogleHeaderProps {
   onToggleSidebar: () => void;
   userName: string;
   userAvatar?: string;
+  isConnected?: boolean;
+  isCheckingHealth?: boolean;
+  onCheckHealth?: () => void;
 }
 
 export const GoogleHeader: React.FC<GoogleHeaderProps> = ({
   onToggleSidebar,
   userName,
   userAvatar,
+  isConnected = true,
+  isCheckingHealth = false,
+  onCheckHealth,
 }) => {
   return (
     <header className="h-16 bg-[#1f1f1f] border-b border-white/[0.06] px-4 flex items-center justify-between select-none shrink-0 z-30">
@@ -34,30 +40,44 @@ export const GoogleHeader: React.FC<GoogleHeaderProps> = ({
         </div>
       </div>
 
-      {/* Right Section: Help, Apps, User Avatar */}
-      <div className="flex items-center space-x-2">
-
-
+      {/* Right Section: Backend Connection Status + User Avatar */}
+      <div className="flex items-center space-x-3">
+        {/* Render Connection Status Button */}
         <button
-          className="p-2 rounded-full hover:bg-white/[0.08] text-[#c4c7c5] transition-colors"
-          title="Support"
+          onClick={onCheckHealth}
+          title={
+            isConnected
+              ? 'Render Backend: Connected (Click to re-check connection status)'
+              : 'Render Backend: Offline (Click to retry connection)'
+          }
+          className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center space-x-2 border transition-all cursor-pointer shadow-sm ${
+            isConnected
+              ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+              : 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border-rose-500/30'
+          }`}
         >
-          <HelpCircle className="w-5 h-5" />
-        </button>
-
-        <button
-          className="p-2 rounded-full hover:bg-white/[0.08] text-[#c4c7c5] transition-colors"
-          title="Google apps"
-        >
-          <Grid className="w-5 h-5" />
+          <span
+            className={`w-2.5 h-2.5 rounded-full ${
+              isCheckingHealth
+                ? 'bg-amber-400 animate-ping'
+                : isConnected
+                ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse'
+                : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)]'
+            }`}
+          />
+          <span className="font-semibold tracking-wide flex items-center space-x-1">
+            <span>{isCheckingHealth ? 'Checking...' : isConnected ? 'Render Connected' : 'Render Offline'}</span>
+            {isCheckingHealth && <RefreshCw className="w-3 h-3 animate-spin ml-1 inline text-amber-400" />}
+          </span>
         </button>
 
         <div className="pl-1">
           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-xs border border-white/20 shadow">
-            {userName.charAt(0)}
+            {userName.charAt(0).toUpperCase()}
           </div>
         </div>
       </div>
     </header>
   );
 };
+

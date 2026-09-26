@@ -43,10 +43,24 @@ export function App() {
 
   // State to track which categories are ticked/checked in the sidebar for board layout display
   const [tickedListIds, setTickedListIds] = useState<string[]>([]);
+  // Backend connectivity status tracking
+  const [isConnected, setIsConnected] = useState<boolean>(true);
+  const [isCheckingHealth, setIsCheckingHealth] = useState<boolean>(false);
+
+  const handleCheckHealth = async () => {
+    setIsCheckingHealth(true);
+    const online = await api.checkHealth();
+    setIsConnected(online);
+    setIsCheckingHealth(false);
+    return online;
+  };
 
   // Sync initial state and periodically poll backend for autonomous AI background actions
   useEffect(() => {
     async function loadBackendData() {
+      const online = await api.checkHealth();
+      setIsConnected(online);
+
       const serverLists = await api.getTaskLists();
       if (serverLists) {
         setTaskLists(serverLists);
@@ -70,6 +84,9 @@ export function App() {
 
     // Poll every 8s for autonomous runner background updates (e.g. deleted lists/tasks or check-in chats)
     const interval = setInterval(async () => {
+      const online = await api.checkHealth();
+      setIsConnected(online);
+
       const [serverTasks, serverLists, serverChat, serverSessions] = await Promise.all([
         api.getTasks(),
         api.getTaskLists(),
@@ -325,6 +342,9 @@ export function App() {
           onOpenMemory={() => setActiveView('memory')}
           onOpenAIChat={() => setActiveView('ai-chat')}
           onAskAI={handleAskAI}
+          isConnected={isConnected}
+          isCheckingHealth={isCheckingHealth}
+          onCheckHealth={handleCheckHealth}
         />
       ) : (
         <>
@@ -332,6 +352,9 @@ export function App() {
           <GoogleHeader
             onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
             userName={user.profile.name}
+            isConnected={isConnected}
+            isCheckingHealth={isCheckingHealth}
+            onCheckHealth={handleCheckHealth}
           />
 
           {/* Main Body */}
