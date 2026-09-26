@@ -2,6 +2,7 @@ import { aiAgentGoalService } from './aiAgentGoal.service.js';
 import { taskListService } from './taskList.service.js';
 import { chatStorageService } from './chatStorage.service.js';
 import { MemoryService } from './memory.service.js';
+import { dbConnection } from '../db/connection.js';
 
 const memoryService = new MemoryService();
 
@@ -15,12 +16,14 @@ export class AIAgentRunner {
 
     // Run an initial check after 3 seconds
     setTimeout(() => {
+      if (!dbConnection.getStatus().connected) return;
       this.checkAndRunDueGoals().catch((err) =>
         console.error('[AIAgentRunner] Initial check error:', err)
       );
     }, 3000);
 
     this.timer = setInterval(() => {
+      if (!dbConnection.getStatus().connected) return;
       this.checkAndRunDueGoals().catch((err) =>
         console.error('[AIAgentRunner] Interval check error:', err)
       );
@@ -41,6 +44,7 @@ export class AIAgentRunner {
   }
 
   public async checkAndRunDueGoals(): Promise<void> {
+    if (!dbConnection.getStatus().connected) return;
     const nowIso = new Date().toISOString();
     const dueGoals = await aiAgentGoalService.getDueGoals(nowIso);
 
@@ -121,6 +125,7 @@ export class AIAgentRunner {
   public latestDailySummary: string = "Analyzing your day...";
 
   public async runHourlyAnalysis(): Promise<void> {
+    if (!dbConnection.getStatus().connected) return;
     const now = new Date();
     // Run exactly once per hour (check if we ran in the current hour)
     if (this.lastHourlyRun === now.getHours()) return;
