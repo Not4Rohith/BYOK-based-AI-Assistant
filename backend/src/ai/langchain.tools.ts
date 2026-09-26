@@ -5,6 +5,7 @@ import { TaskService } from '../services/task.service.js';
 import { taskListService } from '../services/taskList.service.js';
 import { aiAgentGoalService } from '../services/aiAgentGoal.service.js';
 import { automaticReplanner } from './automaticReplanner.js';
+import { transientScratchpad } from './scratchpad.js';
 
 export function createLangChainTools(taskService?: TaskService) {
   const getTasksTool = tool(
@@ -42,7 +43,11 @@ export function createLangChainTools(taskService?: TaskService) {
         return taskObj;
       });
 
-      return JSON.stringify({ count: formatted.length, tasks: formatted });
+      // Write concise summary into single-use transient scratchpad
+      const taskTitles = formatted.slice(0, 10).map((t) => t.title).join(', ');
+      transientScratchpad.write(`[Tasks Summary]: ${formatted.length} ${filter || 'pending'} tasks. Items: ${taskTitles || 'None'}.`);
+
+      return JSON.stringify({ count: formatted.length, tasks: formatted, scratchpadSaved: true });
     },
     {
       name: 'get_tasks',
@@ -407,18 +412,78 @@ export function createLangChainTools(taskService?: TaskService) {
         estimatedMinutes: t.estimatedMinutes,
       }));
 
+      const agendaTitles = timeline.slice(0, 8).map((t) => t.title).join(', ');
+      transientScratchpad.write(`[Today Agenda Summary]: ${todayTasks.length} total tasks (${pending.length} pending, ${completed.length} completed). Agenda items: ${agendaTitles || 'None'}.`);
+
       return JSON.stringify({
         date: todayStr,
         totalTasks: todayTasks.length,
         pendingCount: pending.length,
         completedCount: completed.length,
         timeline,
+        scratchpadSaved: true,
       });
     },
     {
       name: 'get_today_agenda',
       description: "Get today's agenda including timeline, pending tasks count, completed tasks, and schedule blocks.",
       schema: z.object({}),
+    }
+  );
+
+  const readScratchpadTool = tool(
+    async () => {
+      const scratch = transientScratchpad.readAndClear();
+      if (scratch.empty || !scratch.content) {
+        return JSON.stringify({ empty: true, message: 'Scratchpad is empty.' });
+      }
+      return JSON.stringify({ empty: false, content: scratch.content, wiped: true });
+    },
+    {
+      name: 'read_scratchpad',
+      description: 'Access and retrieve stored memory summary from the single-use transient scratchpad. Reading automatically wipes and clears the scratchpad.',
+      schema: z.object({}),
+    }
+  );
+
+  const scheduleSelfAlarmTool = tool(
+    async ({ title, delayMinutes, scheduledIsoTime, actionType, notes }) => {
+      let targetTime = scheduledIsoTime;
+      if (!targetTime && delayMinutes) {
+        const d = new Date();
+        d.setMinutes(d.getMinutes() + delayMinutes);
+        targetTime = d.toISOString();
+      }
+      if (!targetTime) {
+        const d = new Date();
+        d.setHours(d.getHours() + 1);
+        targetTime = d.toISOString();
+      }
+
+      const agentGoal = await aiAgentGoalService.createAgentGoal({
+        title: title || 'AI Autonomous Self-Trigger Alarm',
+        actionType: actionType || 'autonomous_followup',
+        targetExecutionTime: targetTime,
+        payload: { notes: notes || title, selfAlarm: true },
+      });
+
+      return JSON.stringify({
+        success: true,
+        message: `Self-invoking alarm "${agentGoal.title}" scheduled for execution at ${new Date(targetTime).toLocaleTimeString()}.`,
+        goalId: agentGoal._id,
+        targetExecutionTime: targetTime,
+      });
+    },
+    {
+      name: 'schedule_self_alarm',
+      description: 'Schedule an autonomous self-invoking alarm for the AI assistant to trigger itself at a future time (in N minutes or specific ISO timestamp) to follow up, re-evaluate tasks, check progress, or execute background operations.',
+      schema: z.object({
+        title: z.string().describe('Title of the autonomous self-alarm/follow-up'),
+        delayMinutes: z.number().optional().describe('Minutes in the future to trigger alarm'),
+        scheduledIsoTime: z.string().optional().describe('Exact ISO timestamp to trigger alarm'),
+        actionType: z.enum(['autonomous_followup', 'replan_day', 'check_pending_tasks', 'delete_list_and_tasks']).optional().default('autonomous_followup'),
+        notes: z.string().optional().describe('Notes/context for the AI when alarm fires'),
+      }),
     }
   );
 
@@ -728,5 +793,7 @@ export function createLangChainTools(taskService?: TaskService) {
     createAgentGoalTool,
     getActiveAiGoalsTool,
     cancelAiAgentGoalTool,
+    readScratchpadTool,
+    scheduleSelfAlarmTool,
   ];
 }
