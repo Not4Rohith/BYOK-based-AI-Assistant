@@ -107,6 +107,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   useEffect(() => {
+    if (aiConfig) {
+      setDailySchedule(aiConfig.dailySchedule || '');
+      setMongoUri(aiConfig.mongoUri || '');
+      setOpenRouterKey(aiConfig.openrouter?.apiKey || '');
+      setGeminiKey(aiConfig.gemini?.apiKey || '');
+      setGrokKey(aiConfig.grok?.apiKey || '');
+
+      setOpenRouterDefault(aiConfig.openrouter?.defaultModel || '');
+      setGeminiDefault(aiConfig.gemini?.defaultModel || '');
+      setGrokDefault(aiConfig.grok?.defaultModel || '');
+
+      setOpenRouterFallbacks(aiConfig.openrouter?.fallbackModels || []);
+      setGeminiFallbacks(aiConfig.gemini?.fallbackModels || []);
+      setGrokFallbacks(aiConfig.grok?.fallbackModels || []);
+    }
+  }, [aiConfig]);
+
+  useEffect(() => {
     // Auto-fetch models on component load (openrouter works with or without key)
     fetchModelsForProvider('openrouter', openRouterKey);
     if (geminiKey) fetchModelsForProvider('gemini', geminiKey);
@@ -335,7 +353,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <select
                   value={openRouterDefault}
                   onChange={(e) => setOpenRouterDefault(e.target.value)}
-                  className="w-full bg-[#242424] border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-indigo-500/50 font-mono cursor-pointer"
+                  className="w-full max-w-full truncate bg-[#242424] border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-indigo-500/50 font-mono cursor-pointer overflow-hidden"
                 >
                   {openRouterDefault && !availableModels.openrouter.some((m) => m.id === openRouterDefault) && (
                     <option value={openRouterDefault}>{openRouterDefault} (Custom)</option>
@@ -354,10 +372,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <label className="text-xs font-semibold text-slate-300">
                 Ranked Fallback Candidate Models
               </label>
-              <div className="flex items-center justify-between">
-
+              <div className="w-full max-w-full overflow-hidden">
                 <select
-                  className="bg-[#242424] border border-blue-500/40 hover:border-blue-400 rounded-lg px-2.5 py-1 text-xs text-blue-300 font-mono focus:outline-none cursor-pointer"
+                  className="w-full max-w-full truncate bg-[#242424] border border-blue-500/40 hover:border-blue-400 rounded-lg px-2.5 py-2 text-xs text-blue-300 font-mono focus:outline-none cursor-pointer overflow-hidden"
                   onChange={(e) => {
                     if (e.target.value) {
                       addFallbackModel('openrouter', e.target.value);
@@ -471,7 +488,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <select
                   value={geminiDefault}
                   onChange={(e) => setGeminiDefault(e.target.value)}
-                  className="w-full bg-[#242424] border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500/50 font-mono cursor-pointer"
+                  className="w-full max-w-full truncate bg-[#242424] border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500/50 font-mono cursor-pointer overflow-hidden"
                 >
                   {geminiDefault && !availableModels.gemini.some((m) => m.id === geminiDefault) && (
                     <option value={geminiDefault}>{geminiDefault} (Custom)</option>
@@ -490,10 +507,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <label className="text-xs font-semibold text-slate-300">
                 Ranked Fallback Candidate Models
               </label>
-              <div className="flex items-center justify-between">
-
+              <div className="w-full max-w-full overflow-hidden">
                 <select
-                  className="bg-[#242424] border border-emerald-500/40 hover:border-emerald-400 rounded-lg px-2.5 py-1 text-xs text-emerald-300 font-mono focus:outline-none cursor-pointer"
+                  className="w-full max-w-full truncate bg-[#242424] border border-emerald-500/40 hover:border-emerald-400 rounded-lg px-2.5 py-2 text-xs text-emerald-300 font-mono focus:outline-none cursor-pointer overflow-hidden"
                   onChange={(e) => {
                     if (e.target.value) {
                       addFallbackModel('gemini', e.target.value);
@@ -604,7 +620,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <select
                   value={grokDefault}
                   onChange={(e) => setGrokDefault(e.target.value)}
-                  className="w-full bg-[#242424] border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500/50 font-mono cursor-pointer"
+                  className="w-full max-w-full truncate bg-[#242424] border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500/50 font-mono cursor-pointer overflow-hidden"
                 >
                   {grokDefault && !availableModels.grok.some((m) => m.id === grokDefault) && (
                     <option value={grokDefault}>{grokDefault} (Custom)</option>
@@ -623,10 +639,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <label className="text-xs font-semibold text-slate-300">
                 Ranked Fallback Candidate Models
               </label>
-              <div className="flex items-center justify-between">
-
+              <div className="w-full max-w-full overflow-hidden">
                 <select
-                  className="bg-[#242424] border border-emerald-500/40 hover:border-emerald-400 rounded-lg px-2.5 py-1 text-xs text-emerald-300 font-mono focus:outline-none cursor-pointer"
+                  className="w-full max-w-full truncate bg-[#242424] border border-emerald-500/40 hover:border-emerald-400 rounded-lg px-2.5 py-2 text-xs text-emerald-300 font-mono focus:outline-none cursor-pointer overflow-hidden"
                   onChange={(e) => {
                     if (e.target.value) {
                       addFallbackModel('grok', e.target.value);

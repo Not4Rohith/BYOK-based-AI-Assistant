@@ -323,22 +323,24 @@ export const api = {
         ...serverConfig,
         openrouter: {
           ...serverConfig.openrouter,
-          apiKey: serverConfig.openrouter?.apiKey || cached?.openrouter?.apiKey || '',
-          defaultModel: serverConfig.openrouter?.defaultModel || cached?.openrouter?.defaultModel || '',
-          fallbackModels: serverConfig.openrouter?.fallbackModels?.length ? serverConfig.openrouter.fallbackModels : (cached?.openrouter?.fallbackModels || []),
+          apiKey: (cached?.openrouter?.apiKey && cached.openrouter.apiKey.trim()) ? cached.openrouter.apiKey : (serverConfig.openrouter?.apiKey || ''),
+          defaultModel: (cached?.openrouter?.defaultModel && cached.openrouter.defaultModel.trim()) ? cached.openrouter.defaultModel : (serverConfig.openrouter?.defaultModel || ''),
+          fallbackModels: (cached?.openrouter?.fallbackModels?.length ? cached.openrouter.fallbackModels : serverConfig.openrouter?.fallbackModels) || [],
         },
         gemini: {
           ...serverConfig.gemini,
-          apiKey: serverConfig.gemini?.apiKey || cached?.gemini?.apiKey || '',
-          defaultModel: serverConfig.gemini?.defaultModel || cached?.gemini?.defaultModel || '',
-          fallbackModels: serverConfig.gemini?.fallbackModels?.length ? serverConfig.gemini.fallbackModels : (cached?.gemini?.fallbackModels || []),
+          apiKey: (cached?.gemini?.apiKey && cached.gemini.apiKey.trim()) ? cached.gemini.apiKey : (serverConfig.gemini?.apiKey || ''),
+          defaultModel: (cached?.gemini?.defaultModel && cached.gemini.defaultModel.trim()) ? cached.gemini.defaultModel : (serverConfig.gemini?.defaultModel || ''),
+          fallbackModels: (cached?.gemini?.fallbackModels?.length ? cached.gemini.fallbackModels : serverConfig.gemini?.fallbackModels) || [],
         },
         grok: {
           ...serverConfig.grok,
-          apiKey: serverConfig.grok?.apiKey || cached?.grok?.apiKey || '',
-          defaultModel: serverConfig.grok?.defaultModel || cached?.grok?.defaultModel || '',
-          fallbackModels: serverConfig.grok?.fallbackModels?.length ? serverConfig.grok.fallbackModels : (cached?.grok?.fallbackModels || []),
+          apiKey: (cached?.grok?.apiKey && cached.grok.apiKey.trim()) ? cached.grok.apiKey : (serverConfig.grok?.apiKey || ''),
+          defaultModel: (cached?.grok?.defaultModel && cached.grok.defaultModel.trim()) ? cached.grok.defaultModel : (serverConfig.grok?.defaultModel || ''),
+          fallbackModels: (cached?.grok?.fallbackModels?.length ? cached.grok.fallbackModels : serverConfig.grok?.fallbackModels) || [],
         },
+        dailySchedule: cached?.dailySchedule || serverConfig.dailySchedule || '',
+        mongoUri: cached?.mongoUri || serverConfig.mongoUri || '',
       };
       offlineCache.setCachedAIConfig(merged);
       return merged;
@@ -354,8 +356,31 @@ export const api = {
       body: JSON.stringify(config),
     });
     if (updated) {
-      offlineCache.setCachedAIConfig(updated);
-      return updated;
+      const merged: AIProviderConfig = {
+        ...updated,
+        openrouter: {
+          ...updated.openrouter,
+          apiKey: config.openrouter.apiKey || updated.openrouter?.apiKey || '',
+          defaultModel: config.openrouter.defaultModel || updated.openrouter?.defaultModel || '',
+          fallbackModels: config.openrouter.fallbackModels || updated.openrouter?.fallbackModels || [],
+        },
+        gemini: {
+          ...updated.gemini,
+          apiKey: config.gemini.apiKey || updated.gemini?.apiKey || '',
+          defaultModel: config.gemini.defaultModel || updated.gemini?.defaultModel || '',
+          fallbackModels: config.gemini.fallbackModels || updated.gemini?.fallbackModels || [],
+        },
+        grok: {
+          ...updated.grok,
+          apiKey: config.grok.apiKey || updated.grok?.apiKey || '',
+          defaultModel: config.grok.defaultModel || updated.grok?.defaultModel || '',
+          fallbackModels: config.grok.fallbackModels || updated.grok?.fallbackModels || [],
+        },
+        dailySchedule: config.dailySchedule || updated.dailySchedule || '',
+        mongoUri: config.mongoUri || updated.mongoUri || '',
+      };
+      offlineCache.setCachedAIConfig(merged);
+      return merged;
     }
     return config;
   },

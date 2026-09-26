@@ -8,6 +8,7 @@ import { MemoryView } from './components/MemoryView';
 import { AITaskbar } from './components/AITaskbar';
 import { FullScreenChat } from './components/FullScreenChat';
 import { api } from './api/client';
+import { offlineCache } from './api/offlineCache';
 import { Task, TaskList, User, AIProviderConfig, ChatMessage, ChatSession } from '@ai-task-manager/shared-types';
 
 export function App() {
@@ -30,10 +31,13 @@ export function App() {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   });
-  const [aiConfig, setAiConfig] = useState<AIProviderConfig>({
-    openrouter: { enabled: true, defaultModel: '', fallbackModels: [], apiKey: '' },
-    gemini: { enabled: true, defaultModel: '', fallbackModels: [], apiKey: '' },
-    grok: { enabled: false, defaultModel: '', fallbackModels: [], apiKey: '' }
+  const [aiConfig, setAiConfig] = useState<AIProviderConfig>(() => {
+    const cached = offlineCache.getCachedAIConfig();
+    return cached || {
+      openrouter: { enabled: true, defaultModel: '', fallbackModels: [], apiKey: '' },
+      gemini: { enabled: true, defaultModel: '', fallbackModels: [], apiKey: '' },
+      grok: { enabled: false, defaultModel: '', fallbackModels: [], apiKey: '' }
+    };
   });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -304,9 +308,10 @@ export function App() {
             user={user}
             onUpdateUser={setUser}
             aiConfig={aiConfig}
-            onUpdateAIConfig={(cfg) => {
+            onUpdateAIConfig={async (cfg) => {
               setAiConfig(cfg);
-              api.updateAIConfig(cfg);
+              const updated = await api.updateAIConfig(cfg);
+              if (updated) setAiConfig(updated);
             }}
           />
         </div>

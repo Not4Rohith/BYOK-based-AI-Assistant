@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Task, TaskList, User } from '@ai-task-manager/shared-types';
 import { GoogleTaskDetailsMobileScreen } from './GoogleTaskDetailsMobileScreen';
 import { GoogleDatePopover } from './GoogleDatePopover';
@@ -77,15 +77,30 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
 
-  // Pull to refresh states
+  // Pull to refresh & horizontal swipe states
   const [pullStartY, setPullStartY] = useState<number | null>(null);
   const [pullDistance, setPullDistance] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+
+  const allTabIds = ['starred', ...taskLists.map((l) => l._id)];
+
+  useEffect(() => {
+    // Auto scroll active tab header button into view smoothly
+    const activeTabEl = document.getElementById(`tab-btn-${activeListId}`);
+    if (activeTabEl) {
+      activeTabEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, [activeListId]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    setTouchStartX(touch.clientX);
+    setTouchStartY(touch.clientY);
     const scrollContainer = e.currentTarget;
     if (scrollContainer.scrollTop === 0) {
-      setPullStartY(e.touches[0].clientY);
+      setPullStartY(touch.clientY);
     }
   };
 
@@ -114,13 +129,38 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
     }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX !== null && touchStartY !== null && e.changedTouches.length > 0) {
+      const touchEndX = e.changedTouches[0].clientX;
+      const touchEndY = e.changedTouches[0].clientY;
+      const deltaX = touchEndX - touchStartX;
+      const deltaY = touchEndY - touchStartY;
+
+      // Smooth swipe category tab transition (horizontal swipe > 40px)
+      if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+        const currentIndex = allTabIds.indexOf(activeListId);
+        if (deltaX < 0) {
+          // Swipe Left -> Next Category Tab
+          if (currentIndex !== -1 && currentIndex < allTabIds.length - 1) {
+            setActiveListId(allTabIds[currentIndex + 1]);
+          }
+        } else {
+          // Swipe Right -> Previous Category Tab
+          if (currentIndex > 0) {
+            setActiveListId(allTabIds[currentIndex - 1]);
+          }
+        }
+      }
+    }
+
     if (pullDistance > 45) {
       triggerRefresh();
     } else {
       setPullDistance(0);
       setPullStartY(null);
     }
+    setTouchStartX(null);
+    setTouchStartY(null);
   };
 
   const isStarTab = activeListId === 'starred';
@@ -187,7 +227,7 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#141218] text-[#E6E1E5] font-sans relative overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-[#141218] text-[#E6E1E5] font-sans relative overflow-hidden select-none">
       {/* 1. Top App Bar (Google Tasks Mobile Header - Android safe area top clearance: 48px ~ 56px) */}
       <div className="flex items-center justify-between px-5 pt-12 pb-3 bg-[#141218] shrink-0">
         <h1 className="text-2xl font-normal text-[#E6E1E5] tracking-tight">Tasks</h1>
@@ -281,10 +321,11 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
         </div>
       </div>
 
-      {/* 2. List Area Horizontal Tab Bar (Screenshot 1: Star tab ★ + category list tabs with count badges) */}
-      <div className="flex items-center space-x-2 px-4 border-b border-[#2B2930] overflow-x-auto no-scrollbar shrink-0">
-        {/* Tab #0: Star Tab ★ (Screenshot 1) */}
+      {/* 2. List Area Horizontal Tab Bar (Invisible Scrollbar no-scrollbar) */}
+      <div className="flex items-center space-x-2 px-4 border-b border-[#2B2930] overflow-x-auto no-scrollbar shrink-0 scroll-smooth">
+        {/* Tab #0: Star Tab ★ */}
         <button
+          id="tab-btn-starred"
           onClick={() => setActiveListId('starred')}
           className={`py-2.5 px-3 text-sm font-medium whitespace-nowrap border-b-2 transition-all flex items-center space-x-1 ${
             isStarTab
@@ -301,6 +342,7 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
           return (
             <button
               key={list._id}
+              id={`tab-btn-${list._id}`}
               onClick={() => setActiveListId(list._id)}
               className={`py-2.5 px-3 text-sm font-medium whitespace-nowrap border-b-2 transition-all ${
                 isActive
