@@ -46,7 +46,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T | nul
           if (json2.data !== undefined) return json2.data as T;
           return json2 as T;
         }
-      } catch {}
+      } catch { }
     }
     return null;
   }
@@ -55,7 +55,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T | nul
 export const api = {
   getTasks: async (): Promise<Task[] | null> => {
     // Attempt automatic flush if pending mutations exist
-    offlineCache.flush(getApiBaseUrl()).catch(() => {});
+    offlineCache.flush(getApiBaseUrl()).catch(() => { });
 
     const tasks = await fetchJson<Task[]>(`${getApiBaseUrl()}/tasks`);
     if (tasks) {
@@ -242,50 +242,83 @@ export const api = {
 
       if (openRouterKey) {
         const sysPrompt = config?.systemPrompt || 'You are an intelligent AI task management assistant.';
-        const apiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openRouterKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://aitaskmanager.app',
-            'X-Title': 'Personal AI Task Manager',
-          },
-          body: JSON.stringify({
-            model: selectedModel,
-            messages: [
-              { role: 'system', content: sysPrompt },
-              { role: 'user', content: message },
-            ],
-            temperature: 0.7,
-            max_tokens: 1000,
-          }),
-        });
+        const candidateModels = [
+          config?.openrouter?.defaultModel,
+          ...(config?.openrouter?.fallbackModels || []),
+        ]
+          .filter(Boolean)
+          .map((m) => m!.replace(/^~/, '').trim())
+          .filter((m, i, arr) => m.length > 0 && arr.indexOf(m) === i);
 
-        if (apiRes.ok) {
-          const data = await apiRes.json();
-          const replyText = data.choices?.[0]?.message?.content || 'Task processed successfully.';
-
-          const aiMsg: ChatMessage = {
-            _id: `msg_a_${Date.now() + 1}`,
-            sessionId: sessId,
-            role: 'assistant',
-            content: replyText,
-            createdAt: new Date().toISOString(),
-          };
-
-          return { userMsg, aiMsg };
-        } else {
-          const errData = await apiRes.text();
-          console.warn('[Client] OpenRouter API error response:', errData);
-          const aiMsg: ChatMessage = {
-            _id: `msg_a_${Date.now() + 1}`,
-            sessionId: sessId,
-            role: 'assistant',
-            content: `OpenRouter API returned status ${apiRes.status}. Please verify your OpenRouter API Key in Settings.`,
-            createdAt: new Date().toISOString(),
-          };
-          return { userMsg, aiMsg };
+        if (candidateModels.length === 0) {
+          candidateModels.push(selectedModel);
         }
+
+        let lastErrStatus = 402;
+        let lastErrText = '';
+
+        for (const candidateModel of candidateModels) {
+          const maxTokenTiers = [1000, 300, 150];
+          for (const tokens of maxTokenTiers) {
+            try {
+              const apiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${openRouterKey}`,
+                  'Content-Type': 'application/json',
+                  'HTTP-Referer': 'https://aitaskmanager.app',
+                  'X-Title': 'Personal AI Task Manager',
+                },
+                body: JSON.stringify({
+                  model: candidateModel,
+                  messages: [
+                    { role: 'system', content: sysPrompt },
+                    { role: 'user', content: message },
+                  ],
+                  temperature: 0.7,
+                  max_tokens: tokens,
+                }),
+              });
+
+              if (apiRes.ok) {
+                const data = await apiRes.json();
+                const replyText = data.choices?.[0]?.message?.content || 'Task processed successfully.';
+
+                const aiMsg: ChatMessage = {
+                  _id: `msg_a_${Date.now() + 1}`,
+                  sessionId: sessId,
+                  role: 'assistant',
+                  content: replyText,
+                  createdAt: new Date().toISOString(),
+                  metadata: { model: candidateModel },
+                };
+
+                return { userMsg, aiMsg };
+              } else {
+                lastErrStatus = apiRes.status;
+                lastErrText = await apiRes.text();
+                console.warn(`[Client] Model "${candidateModel}" (tokens=${tokens}) returned ${apiRes.status}:`, lastErrText);
+
+                // If NOT a 402 / max_tokens credit error, stop token tier retries for this model and move to NEXT candidate model
+                if (!lastErrText.includes('402') && !lastErrText.includes('max_tokens') && !lastErrText.includes('credits')) {
+                  break;
+                }
+              }
+            } catch (err) {
+              console.warn(`[Client] Model "${candidateModel}" fetch error:`, err);
+              break;
+            }
+          }
+        }
+
+        const aiMsg: ChatMessage = {
+          _id: `msg_a_${Date.now() + 1}`,
+          sessionId: sessId,
+          role: 'assistant',
+          content: `OpenRouter API returned status ${lastErrStatus}: ${lastErrText.substring(0, 150)}. Please verify your OpenRouter API Key and balance in Settings.`,
+          createdAt: new Date().toISOString(),
+        };
+        return { userMsg, aiMsg };
       } else {
         const aiMsg: ChatMessage = {
           _id: `msg_a_${Date.now() + 1}`,
@@ -309,10 +342,10 @@ export const api = {
     }
   },
 
-  replanDay: () =>
-    fetchJson<Task[]>(`${getApiBaseUrl()}/planning/replan`, {
-      method: 'POST',
-    }),
+replanDay: () =>
+  fetchJson<Task[]>(`${getApiBaseUrl()}/planning/replan`, {
+    method: 'POST',
+  }),
 
   getAIConfig: async (): Promise<AIProviderConfig | null> => {
     const cached = offlineCache.getCachedAIConfig();
@@ -348,153 +381,153 @@ export const api = {
     return cached;
   },
 
-  updateAIConfig: async (config: AIProviderConfig): Promise<AIProviderConfig | null> => {
-    // Save to local device storage immediately
-    offlineCache.setCachedAIConfig(config);
-    const updated = await fetchJson<AIProviderConfig>(`${getApiBaseUrl()}/settings/config`, {
-      method: 'POST',
-      body: JSON.stringify(config),
-    });
-    if (updated) {
-      const merged: AIProviderConfig = {
-        ...updated,
-        openrouter: {
-          ...updated.openrouter,
-          apiKey: config.openrouter.apiKey || updated.openrouter?.apiKey || '',
-          defaultModel: config.openrouter.defaultModel || updated.openrouter?.defaultModel || '',
-          fallbackModels: config.openrouter.fallbackModels || updated.openrouter?.fallbackModels || [],
-        },
-        gemini: {
-          ...updated.gemini,
-          apiKey: config.gemini.apiKey || updated.gemini?.apiKey || '',
-          defaultModel: config.gemini.defaultModel || updated.gemini?.defaultModel || '',
-          fallbackModels: config.gemini.fallbackModels || updated.gemini?.fallbackModels || [],
-        },
-        grok: {
-          ...updated.grok,
-          apiKey: config.grok.apiKey || updated.grok?.apiKey || '',
-          defaultModel: config.grok.defaultModel || updated.grok?.defaultModel || '',
-          fallbackModels: config.grok.fallbackModels || updated.grok?.fallbackModels || [],
-        },
-        dailySchedule: config.dailySchedule || updated.dailySchedule || '',
-        mongoUri: config.mongoUri || updated.mongoUri || '',
-      };
-      offlineCache.setCachedAIConfig(merged);
-      return merged;
-    }
-    return config;
-  },
-
-  getAvailableModels: async (provider: string, apiKey?: string) => {
-    const serverResult = await fetchJson<{ id: string; name: string; contextLength?: number }[]>(
-      `${getApiBaseUrl()}/settings/models?provider=${encodeURIComponent(provider)}${apiKey ? `&apiKey=${encodeURIComponent(apiKey)}` : ''}`
-    );
-    if (serverResult && Array.isArray(serverResult) && serverResult.length > 0) {
-      return serverResult;
-    }
-
-    // Direct Client Fallback (Fetches directly when mobile app is offline or backend server unreachable)
-    try {
-      if (provider === 'openrouter') {
-        const headers: Record<string, string> = {
-          'HTTP-Referer': 'https://aitaskmanager.app',
-          'X-Title': 'Personal AI Task Manager',
-        };
-        const key = apiKey || offlineCache.getCachedAIConfig()?.openrouter?.apiKey;
-        if (key && key.trim()) {
-          headers['Authorization'] = `Bearer ${key.trim()}`;
-        }
-        const res = await fetch('https://openrouter.ai/api/v1/models', { headers });
-        if (res.ok) {
-          const json = await res.json();
-          return (json.data || []).map((m: any) => ({
-            id: m.id,
-            name: m.name || m.id,
-            contextLength: m.context_length,
-          }));
-        }
-      } else if (provider === 'gemini') {
-        const key = (apiKey || offlineCache.getCachedAIConfig()?.gemini?.apiKey || '').trim();
-        if (key) {
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-          if (res.ok) {
-            const json = await res.json();
-            return (json.models || [])
-              .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
-              .map((m: any) => ({
-                id: m.name.replace('models/', ''),
-                name: m.displayName || m.name,
-              }));
-          }
-        }
-        const res = await fetch('https://openrouter.ai/api/v1/models');
-        if (res.ok) {
-          const json = await res.json();
-          return (json.data || [])
-            .filter((m: any) => m.id.includes('gemini') || m.id.startsWith('google/'))
-            .map((m: any) => ({
-              id: m.id,
-              name: m.name || m.id,
-              contextLength: m.context_length,
-            }));
-        }
-      } else if (provider === 'grok') {
-        const res = await fetch('https://openrouter.ai/api/v1/models');
-        if (res.ok) {
-          const json = await res.json();
-          return (json.data || [])
-            .filter((m: any) => m.id.includes('grok') || m.id.startsWith('x-ai/'))
-            .map((m: any) => ({
-              id: m.id,
-              name: m.name || m.id,
-              contextLength: m.context_length,
-            }));
-        }
-      }
-    } catch (e) {
-      console.warn('[Client] Direct model fetch fallback failed:', e);
-    }
-    return null;
-  },
-
-  getAnalyticsSummary: () => fetchJson<ProductivityAnalytics>(`${getApiBaseUrl()}/analytics/summary`),
-
-  getTaskLists: () => fetchJson<TaskList[]>(`${getApiBaseUrl()}/lists`),
-  createTaskList: (title: string) =>
-    fetchJson<TaskList>(`${getApiBaseUrl()}/lists`, {
-      method: 'POST',
-      body: JSON.stringify({ title }),
-    }),
-  updateTaskList: (id: string, updates: Partial<TaskList>) =>
-    fetchJson<TaskList>(`${getApiBaseUrl()}/lists/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    }),
-  deleteTaskList: (idOrTitle: string) =>
-    fetchJson<{ deletedList: string; deletedTaskCount: number }>(`${getApiBaseUrl()}/lists/${idOrTitle}`, {
-      method: 'DELETE',
-    }),
-
-  checkHealth: async (): Promise<boolean> => {
-    try {
-      const url = `${getApiBaseUrl()}/health`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
+    updateAIConfig: async (config: AIProviderConfig): Promise<AIProviderConfig | null> => {
+      // Save to local device storage immediately
+      offlineCache.setCachedAIConfig(config);
+      const updated = await fetchJson<AIProviderConfig>(`${getApiBaseUrl()}/settings/config`, {
+        method: 'POST',
+        body: JSON.stringify(config),
       });
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        const json = await res.json();
-        return json.status === 'ok' || json.status === 'healthy';
+      if (updated) {
+        const merged: AIProviderConfig = {
+          ...updated,
+          openrouter: {
+            ...updated.openrouter,
+            apiKey: config.openrouter.apiKey || updated.openrouter?.apiKey || '',
+            defaultModel: config.openrouter.defaultModel || updated.openrouter?.defaultModel || '',
+            fallbackModels: config.openrouter.fallbackModels || updated.openrouter?.fallbackModels || [],
+          },
+          gemini: {
+            ...updated.gemini,
+            apiKey: config.gemini.apiKey || updated.gemini?.apiKey || '',
+            defaultModel: config.gemini.defaultModel || updated.gemini?.defaultModel || '',
+            fallbackModels: config.gemini.fallbackModels || updated.gemini?.fallbackModels || [],
+          },
+          grok: {
+            ...updated.grok,
+            apiKey: config.grok.apiKey || updated.grok?.apiKey || '',
+            defaultModel: config.grok.defaultModel || updated.grok?.defaultModel || '',
+            fallbackModels: config.grok.fallbackModels || updated.grok?.fallbackModels || [],
+          },
+          dailySchedule: config.dailySchedule || updated.dailySchedule || '',
+          mongoUri: config.mongoUri || updated.mongoUri || '',
+        };
+        offlineCache.setCachedAIConfig(merged);
+        return merged;
       }
-      return false;
-    } catch {
-      return false;
-    }
-  },
+      return config;
+    },
 
-  flushSync: () => offlineCache.flush(getApiBaseUrl()),
+      getAvailableModels: async (provider: string, apiKey?: string) => {
+        const serverResult = await fetchJson<{ id: string; name: string; contextLength?: number }[]>(
+          `${getApiBaseUrl()}/settings/models?provider=${encodeURIComponent(provider)}${apiKey ? `&apiKey=${encodeURIComponent(apiKey)}` : ''}`
+        );
+        if (serverResult && Array.isArray(serverResult) && serverResult.length > 0) {
+          return serverResult;
+        }
+
+        // Direct Client Fallback (Fetches directly when mobile app is offline or backend server unreachable)
+        try {
+          if (provider === 'openrouter') {
+            const headers: Record<string, string> = {
+              'HTTP-Referer': 'https://aitaskmanager.app',
+              'X-Title': 'Personal AI Task Manager',
+            };
+            const key = apiKey || offlineCache.getCachedAIConfig()?.openrouter?.apiKey;
+            if (key && key.trim()) {
+              headers['Authorization'] = `Bearer ${key.trim()}`;
+            }
+            const res = await fetch('https://openrouter.ai/api/v1/models', { headers });
+            if (res.ok) {
+              const json = await res.json();
+              return (json.data || []).map((m: any) => ({
+                id: m.id,
+                name: m.name || m.id,
+                contextLength: m.context_length,
+              }));
+            }
+          } else if (provider === 'gemini') {
+            const key = (apiKey || offlineCache.getCachedAIConfig()?.gemini?.apiKey || '').trim();
+            if (key) {
+              const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+              if (res.ok) {
+                const json = await res.json();
+                return (json.models || [])
+                  .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+                  .map((m: any) => ({
+                    id: m.name.replace('models/', ''),
+                    name: m.displayName || m.name,
+                  }));
+              }
+            }
+            const res = await fetch('https://openrouter.ai/api/v1/models');
+            if (res.ok) {
+              const json = await res.json();
+              return (json.data || [])
+                .filter((m: any) => m.id.includes('gemini') || m.id.startsWith('google/'))
+                .map((m: any) => ({
+                  id: m.id,
+                  name: m.name || m.id,
+                  contextLength: m.context_length,
+                }));
+            }
+          } else if (provider === 'grok') {
+            const res = await fetch('https://openrouter.ai/api/v1/models');
+            if (res.ok) {
+              const json = await res.json();
+              return (json.data || [])
+                .filter((m: any) => m.id.includes('grok') || m.id.startsWith('x-ai/'))
+                .map((m: any) => ({
+                  id: m.id,
+                  name: m.name || m.id,
+                  contextLength: m.context_length,
+                }));
+            }
+          }
+        } catch (e) {
+          console.warn('[Client] Direct model fetch fallback failed:', e);
+        }
+        return null;
+      },
+
+        getAnalyticsSummary: () => fetchJson<ProductivityAnalytics>(`${getApiBaseUrl()}/analytics/summary`),
+
+          getTaskLists: () => fetchJson<TaskList[]>(`${getApiBaseUrl()}/lists`),
+            createTaskList: (title: string) =>
+              fetchJson<TaskList>(`${getApiBaseUrl()}/lists`, {
+                method: 'POST',
+                body: JSON.stringify({ title }),
+              }),
+              updateTaskList: (id: string, updates: Partial<TaskList>) =>
+                fetchJson<TaskList>(`${getApiBaseUrl()}/lists/${id}`, {
+                  method: 'PUT',
+                  body: JSON.stringify(updates),
+                }),
+                deleteTaskList: (idOrTitle: string) =>
+                  fetchJson<{ deletedList: string; deletedTaskCount: number }>(`${getApiBaseUrl()}/lists/${idOrTitle}`, {
+                    method: 'DELETE',
+                  }),
+
+                  checkHealth: async (): Promise<boolean> => {
+                    try {
+                      const url = `${getApiBaseUrl()}/health`;
+                      const controller = new AbortController();
+                      const timeoutId = setTimeout(() => controller.abort(), 4000);
+                      const res = await fetch(url, {
+                        headers: { 'Content-Type': 'application/json' },
+                        signal: controller.signal,
+                      });
+                      clearTimeout(timeoutId);
+                      if (res.ok) {
+                        const json = await res.json();
+                        return json.status === 'ok' || json.status === 'healthy';
+                      }
+                      return false;
+                    } catch {
+                      return false;
+                    }
+                  },
+
+                    flushSync: () => offlineCache.flush(getApiBaseUrl()),
 };
 
