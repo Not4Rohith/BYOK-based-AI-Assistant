@@ -1,0 +1,182 @@
+import { ToolGroupKey } from './groups.js';
+import { PromptModuleKey, ContextCategory } from '../router/routing.types.js';
+
+export interface ToolMetadata {
+  name: string;
+  category: ToolGroupKey;
+  risk: 'low' | 'medium' | 'high';
+  requiresLLM: boolean;
+  requiredContext: ContextCategory[];
+  promptModules: PromptModuleKey[];
+}
+
+export const TOOL_REGISTRY: Record<string, ToolMetadata> = {
+  get_tasks: {
+    name: 'get_tasks',
+    category: 'TASK_READ',
+    risk: 'low',
+    requiresLLM: false,
+    requiredContext: ['TASKS'],
+    promptModules: ['taskQuery'],
+  },
+  search_tasks: {
+    name: 'search_tasks',
+    category: 'TASK_READ',
+    risk: 'low',
+    requiresLLM: false,
+    requiredContext: ['TASKS'],
+    promptModules: ['taskQuery'],
+  },
+  get_today_agenda: {
+    name: 'get_today_agenda',
+    category: 'TASK_READ',
+    risk: 'low',
+    requiresLLM: false,
+    requiredContext: ['TODAY_AGENDA', 'TASKS'],
+    promptModules: ['taskQuery'],
+  },
+  create_task: {
+    name: 'create_task',
+    category: 'TASK_CREATE',
+    risk: 'medium',
+    requiresLLM: false,
+    requiredContext: ['TASKS', 'TASK_LISTS'],
+    promptModules: ['taskCreation'],
+  },
+  batch_create_tasks: {
+    name: 'batch_create_tasks',
+    category: 'TASK_CREATE',
+    risk: 'medium',
+    requiresLLM: false,
+    requiredContext: ['TASKS'],
+    promptModules: ['taskCreation'],
+  },
+  update_task: {
+    name: 'update_task',
+    category: 'TASK_UPDATE',
+    risk: 'medium',
+    requiresLLM: false,
+    requiredContext: ['TASKS'],
+    promptModules: ['taskMutation'],
+  },
+  bulk_update_tasks: {
+    name: 'bulk_update_tasks',
+    category: 'TASK_UPDATE',
+    risk: 'medium',
+    requiresLLM: false,
+    requiredContext: ['TASKS'],
+    promptModules: ['taskMutation'],
+  },
+  complete_task: {
+    name: 'complete_task',
+    category: 'TASK_UPDATE',
+    risk: 'low',
+    requiresLLM: false,
+    requiredContext: ['TASKS'],
+    promptModules: ['taskMutation'],
+  },
+  snooze_task: {
+    name: 'snooze_task',
+    category: 'TASK_UPDATE',
+    risk: 'low',
+    requiresLLM: false,
+    requiredContext: ['TASKS'],
+    promptModules: ['taskMutation'],
+  },
+  delete_task: {
+    name: 'delete_task',
+    category: 'TASK_DELETE',
+    risk: 'high',
+    requiresLLM: false,
+    requiredContext: ['TASKS'],
+    promptModules: ['taskDeletion'],
+  },
+  delete_all_tasks: {
+    name: 'delete_all_tasks',
+    category: 'TASK_DELETE',
+    risk: 'high',
+    requiresLLM: false,
+    requiredContext: ['TASKS'],
+    promptModules: ['taskDeletion'],
+  },
+  create_subtask: {
+    name: 'create_subtask',
+    category: 'SUBTASK',
+    risk: 'low',
+    requiresLLM: false,
+    requiredContext: ['TASKS'],
+    promptModules: ['subtasks'],
+  },
+  delete_subtask: {
+    name: 'delete_subtask',
+    category: 'SUBTASK',
+    risk: 'medium',
+    requiresLLM: false,
+    requiredContext: ['TASKS'],
+    promptModules: ['subtasks'],
+  },
+  get_lists: {
+    name: 'get_lists',
+    category: 'LIST',
+    risk: 'low',
+    requiresLLM: false,
+    requiredContext: ['TASK_LISTS'],
+    promptModules: ['lists'],
+  },
+  create_list: {
+    name: 'create_list',
+    category: 'LIST',
+    risk: 'low',
+    requiresLLM: false,
+    requiredContext: ['TASK_LISTS'],
+    promptModules: ['lists'],
+  },
+  delete_list: {
+    name: 'delete_list',
+    category: 'LIST',
+    risk: 'high',
+    requiresLLM: false,
+    requiredContext: ['TASK_LISTS', 'TASKS'],
+    promptModules: ['lists'],
+  },
+  delete_all_lists: {
+    name: 'delete_all_lists',
+    category: 'LIST',
+    risk: 'high',
+    requiresLLM: false,
+    requiredContext: ['TASK_LISTS', 'TASKS'],
+    promptModules: ['lists'],
+  },
+  replan_day: {
+    name: 'replan_day',
+    category: 'SCHEDULING',
+    risk: 'medium',
+    requiresLLM: false,
+    requiredContext: ['TASKS', 'TODAY_AGENDA', 'USER_PREFERENCES'],
+    promptModules: ['scheduling'],
+  },
+  create_ai_agent_goal: {
+    name: 'create_ai_agent_goal',
+    category: 'AUTONOMOUS_AGENT',
+    risk: 'medium',
+    requiresLLM: false,
+    requiredContext: ['GOALS'],
+    promptModules: ['autonomousAgent'],
+  },
+  get_active_ai_goals: {
+    name: 'get_active_ai_goals',
+    category: 'AUTONOMOUS_AGENT',
+    risk: 'low',
+    requiresLLM: false,
+    requiredContext: ['GOALS'],
+    promptModules: ['autonomousAgent'],
+  },
+  cancel_ai_agent_goal: {
+    name: 'cancel_ai_agent_goal',
+    category: 'AUTONOMOUS_AGENT',
+    risk: 'medium',
+    requiresLLM: false,
+    requiredContext: ['GOALS'],
+    promptModules: ['autonomousAgent'],
+  },
+};

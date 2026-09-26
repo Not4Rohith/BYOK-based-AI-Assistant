@@ -5,6 +5,9 @@ import { HumanMessage, AIMessage, SystemMessage, BaseMessage } from '@langchain/
 import { AIProviderConfig, ChatMessage } from '@ai-task-manager/shared-types';
 import { TaskService } from '../services/task.service.js';
 import { createLangChainTools } from './langchain.tools.js';
+import { toolSelector } from './tools/selector.js';
+import { composeSystemPrompt } from './prompts/composer.js';
+import { PromptModuleKey, ContextCategory } from './router/routing.types.js';
 
 export class LangGraphAgentEngine {
   public async processMessage(
@@ -12,7 +15,10 @@ export class LangGraphAgentEngine {
     chatHistory: ChatMessage[],
     config: AIProviderConfig,
     taskService?: TaskService,
-    localTime?: string
+    localTime?: string,
+    selectedTools?: string[],
+    selectedPromptModules?: PromptModuleKey[],
+    selectedContext?: ContextCategory[]
   ): Promise<{ responseText: string; toolCallsExecuted: any[]; metadata?: Record<string, any> }> {
     const openrouterKey = (config.openrouter?.apiKey || '').trim();
     if (!openrouterKey) {
@@ -27,7 +33,10 @@ export class LangGraphAgentEngine {
       .map((m) => m.replace(/^~/, '').trim())
       .filter((m, i, arr) => m.length > 0 && arr.indexOf(m) === i);
 
-    const tools = createLangChainTools(taskService);
+    // Filter tools to ONLY those selected by Laya router
+    const tools = selectedTools && selectedTools.length > 0
+      ? toolSelector.selectTools(selectedTools, taskService)
+      : createLangChainTools(taskService);
     const toolNode = new ToolNode(tools);
 
     const timeContext = localTime
@@ -43,14 +52,18 @@ export class LangGraphAgentEngine {
         timeZoneName: 'short',
       });
 
-    const basePrompt = config.systemPrompt || 'You are an intelligent, autonomous Personal AI Task Assistant.';
-    const systemPromptText = `${basePrompt}
+    // Compose system prompt dynamically using ONLY Laya-selected prompt modules
+    const modulesToUse: PromptModuleKey[] = selectedPromptModules && selectedPromptModules.length > 0
+      ? selectedPromptModules
+      : ['base', 'taskQuery', 'agentReasoning'];
 
-Current Time: ${timeContext}
-User Preferences / Schedule: ${config.dailySchedule || 'No fixed schedule defined.'}
-Instructions: Execute database tools as needed for user task requests. Prior chat history is low-weight background context.`;
+    const systemPromptText = composeSystemPrompt(modulesToUse, {
+      systemPrompt: config.systemPrompt,
+      dailySchedule: config.dailySchedule,
+      timeContext,
+    });
 
-    const isSimpleGreeting = /^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you)[\s!?.]*$/i.test(userPrompt.trim());
+    const isSimpleGreeting = !selectedTools?.length && /^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you)[\s!?.]*$/i.test(userPrompt.trim());
 
     let finalResponseText = '';
     const executedToolLogs: any[] = [];

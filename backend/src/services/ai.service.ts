@@ -9,6 +9,11 @@ import { PlanningService } from './planning.service.js';
 import { dbConnection } from '../db/connection.js';
 import { chatStorageService } from './chatStorage.service.js';
 import { langGraphAgentEngine } from '../ai/langgraph.agent.js';
+import { layaRouter } from '../ai/router/laya.router.js';
+import { directExecutionHandler } from '../ai/router/direct.executor.js';
+import { contextSelector } from '../ai/context/selector.js';
+import { composeSystemPrompt } from '../ai/prompts/composer.js';
+import { LayaTelemetryMetrics } from '../ai/router/routing.types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -135,7 +140,7 @@ export class AIService {
     });
     this.messages.push(userMsg);
 
-    let toolCalls: ChatMessage['toolCalls'] = [];
+    let toolCalls: NonNullable<ChatMessage['toolCalls']> = [];
 
     // 2. Automatically extract atomic memories from conversation
     const extractedMemory = memoryExtractor.extractFromPrompt(userPrompt);
@@ -163,12 +168,153 @@ export class AIService {
     const chatHistory = sessionMessages.filter((m) => m._id !== userMsg._id);
 
     let responseText = '';
-
     let agentMetadata: Record<string, any> = {};
+    const startTime = Date.now();
 
-    // 4. Process user request via LangGraph Agent State Machine (Agent -> Tools -> Agent)
+    // 4. Laya Decision Router Layer
     try {
-      console.log('[AIService] Processing prompt via LangGraphAgentEngine...');
+      console.log('[AIService] 🧭 Routing prompt via Laya Router...');
+      const decision = await layaRouter.route(userPrompt, {
+        systemPrompt: this.config.systemPrompt,
+        dailySchedule: this.config.dailySchedule,
+        localTime,
+        openrouterApiKey: this.config.openrouter?.apiKey,
+      });
+
+      const telemetry: LayaTelemetryMetrics = {
+        route: decision.route,
+        operation: decision.operation,
+        confidence: decision.confidence,
+        selectedPromptModules: decision.promptModules,
+        selectedTools: decision.tools,
+        selectedContext: decision.context,
+        llmTokens: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        llmCalls: 0,
+        langGraphIterations: 0,
+        latencyMs: 0,
+      };
+
+      // ROUTE 1 — DIRECT EXECUTION (Deterministic TypeScript, 0 LLM tokens, 0 LangGraph iterations)
+      if (decision.route === 'DIRECT') {
+        console.log(`[AIService] ⚡ Route DIRECT selected (Operation=${decision.operation}). Executing TypeScript handler...`);
+        const directRes = await directExecutionHandler.execute(decision, this.taskService);
+        responseText = directRes.responseText;
+        toolCalls = [...toolCalls, ...directRes.toolCallsExecuted];
+        telemetry.latencyMs = Date.now() - startTime;
+        agentMetadata = {
+          model: 'laya/direct_execution',
+          provider: 'typescript_engine',
+          tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          telemetry,
+        };
+      }
+
+      // ROUTE 2 — SIMPLE_LLM (Single LLM call, selective prompt modules, selective tools, no LangGraph loop)
+      else if (decision.route === 'SIMPLE_LLM') {
+        console.log(`[AIService] 🧠 Route SIMPLE_LLM selected (Modules=[${decision.promptModules.join(', ')}], Tools=[${decision.tools.join(', ')}])...`);
+        telemetry.llmCalls = 1;
+
+        const openrouterKey = (this.config.openrouter?.apiKey || '').trim();
+        const timeContext = localTime || new Date().toLocaleString();
+
+        const systemPromptText = composeSystemPrompt(decision.promptModules, {
+          systemPrompt: this.config.systemPrompt,
+          dailySchedule: this.config.dailySchedule,
+          timeContext,
+        });
+
+        const loadedContext = await contextSelector.loadContext(decision.context, {
+          taskService: this.taskService,
+          memoryService: this.memoryService,
+          dailySchedule: this.config.dailySchedule,
+          chatHistory: decision.history ? chatHistory : [],
+          localTime,
+        });
+
+        let contextSummary = '';
+        if (loadedContext.tasks && loadedContext.tasks.length > 0) {
+          contextSummary += `\nTasks Context: ${JSON.stringify(loadedContext.tasks.slice(0, 10).map((t) => ({ id: t._id, title: t.title, status: t.status, priority: t.priority })))}`;
+        }
+        if (loadedContext.agenda && loadedContext.agenda.length > 0) {
+          contextSummary += `\nToday Agenda Context: ${JSON.stringify(loadedContext.agenda.map((t) => t.title))}`;
+        }
+        if (loadedContext.memories && loadedContext.memories.length > 0) {
+          contextSummary += `\nUser Memory Context: ${JSON.stringify(loadedContext.memories.slice(0, 5).map((m) => m.content))}`;
+        }
+
+        const candidateModels = [this.config.openrouter?.defaultModel, ...(this.config.openrouter?.fallbackModels || [])].filter(Boolean);
+        const modelToUse = candidateModels[0] || 'google/gemini-2.5-flash';
+
+        if (openrouterKey) {
+          const payloadMessages = [
+            { role: 'system', content: `${systemPromptText}${contextSummary}` },
+            ...(decision.history ? chatHistory.slice(-2).map((m) => ({ role: m.role, content: m.content })) : []),
+            { role: 'user', content: userPrompt },
+          ];
+
+          const openrouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openrouterKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://aitaskmanager.app',
+              'X-Title': 'Personal AI Task Manager',
+            },
+            body: JSON.stringify({
+              model: modelToUse,
+              messages: payloadMessages,
+              temperature: 0.7,
+              max_tokens: 150,
+            }),
+          });
+
+          if (openrouterRes.ok) {
+            const data = await openrouterRes.json();
+            responseText = data.choices?.[0]?.message?.content || 'Completed your request.';
+            const usage = data.usage || {};
+            telemetry.llmTokens = {
+              promptTokens: usage.prompt_tokens || 0,
+              completionTokens: usage.completion_tokens || 0,
+              totalTokens: usage.total_tokens || 0,
+            };
+            telemetry.latencyMs = Date.now() - startTime;
+            agentMetadata = {
+              model: modelToUse,
+              provider: 'openrouter',
+              tokenUsage: telemetry.llmTokens,
+              telemetry,
+            };
+          } else {
+            decision.route = 'AGENT'; // Fallback to Agent if API returned non-200
+          }
+        } else {
+          decision.route = 'AGENT';
+        }
+      }
+
+      // ROUTE 3 — AGENT (Full LangGraph agent loop with selective tools and prompt modules)
+      if (decision.route === 'AGENT' || !responseText) {
+        console.log(`[AIService] 🤖 Route AGENT selected (Modules=[${decision.promptModules.join(', ')}], Tools=[${decision.tools.join(', ')}])...`);
+        const agentResult = await langGraphAgentEngine.processMessage(
+          userPrompt,
+          chatHistory,
+          this.config,
+          this.taskService,
+          localTime,
+          decision.tools,
+          decision.promptModules,
+          decision.context
+        );
+        responseText = agentResult.responseText;
+        toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
+        telemetry.latencyMs = Date.now() - startTime;
+        agentMetadata = {
+          ...(agentResult.metadata || {}),
+          telemetry,
+        };
+      }
+    } catch (err) {
+      console.warn('[AIService] Laya routing execution failed, executing safe fallback agent:', err);
       const agentResult = await langGraphAgentEngine.processMessage(
         userPrompt,
         chatHistory,
@@ -179,9 +325,6 @@ export class AIService {
       responseText = agentResult.responseText;
       toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
       agentMetadata = agentResult.metadata || {};
-    } catch (err) {
-      console.warn('[AIService] LangGraph agent execution failed:', err);
-      responseText = `I encountered an issue processing your request: ${(err as Error).message}`;
     }
 
     if (!responseText || responseText.trim() === '') {
