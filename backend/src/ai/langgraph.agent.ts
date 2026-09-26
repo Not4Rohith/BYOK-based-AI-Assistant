@@ -22,14 +22,16 @@ export class LangGraphAgentEngine {
     const rawCandidates = [
       config.openrouter?.defaultModel,
       ...(config.openrouter?.fallbackModels || []),
-      'google/gemini-2.5-flash',
-      'openai/gpt-4o-mini',
     ];
 
     const candidateModels = rawCandidates
       .filter((m): m is string => Boolean(m && typeof m === 'string'))
       .map((m) => m.replace(/^~/, '').trim())
       .filter((m, i, arr) => m.length > 0 && arr.indexOf(m) === i);
+
+    if (candidateModels.length === 0) {
+      candidateModels.push('openai/gpt-4o-mini');
+    }
 
     const tools = createLangChainTools(taskService);
     const toolNode = new ToolNode(tools);
@@ -72,8 +74,8 @@ ${config.dailySchedule || 'No fixed schedule defined.'}
       const modelName = candidateModels[candidateIdx];
       console.log(`[LangGraphAgentEngine] 🤖 Candidate Model [${candidateIdx + 1}/${candidateModels.length}]: "${modelName}"`);
 
-      // Try tokens limit candidate tiers (1000 -> 300 -> 150) to recover from OpenRouter 402 max_tokens credit limits
-      const maxTokenTiers = [1000, 300, 150];
+      // Try tokens limit candidate tiers (400 -> 250 -> 150) to recover from OpenRouter 402 max_tokens credit limits
+      const maxTokenTiers = [400, 250, 150];
 
       for (let tierIdx = 0; tierIdx < maxTokenTiers.length; tierIdx++) {
         const currentMaxTokens = maxTokenTiers[tierIdx];
@@ -95,6 +97,9 @@ ${config.dailySchedule || 'No fixed schedule defined.'}
             },
             temperature: 0.7,
             maxTokens: currentMaxTokens,
+            modelKwargs: {
+              max_tokens: currentMaxTokens,
+            },
           });
 
           const modelWithTools = llm.bindTools(tools);

@@ -29,6 +29,14 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Terminal HTTP request logger
+app.use((req, _res, next) => {
+  if (req.path.startsWith('/api')) {
+    console.log(`[HTTP] ${req.method} ${req.path} - ${new Date().toLocaleTimeString()}`);
+  }
+  next();
+});
+
 // Initialize services
 const taskService = new TaskService();
 const goalService = new GoalService();

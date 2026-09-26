@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Task, TaskList, User } from '@ai-task-manager/shared-types';
 import { GoogleTaskDetailsMobileScreen } from './GoogleTaskDetailsMobileScreen';
 import { GoogleDatePopover } from './GoogleDatePopover';
+import { api } from '../api/client';
 import {
   Plus,
   Star,
@@ -19,6 +20,7 @@ import {
   RefreshCw,
   X,
   Check,
+  Loader2,
 } from 'lucide-react';
 
 interface GoogleTasksMobileViewProps {
@@ -76,6 +78,26 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
 
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+
+  // Daily AI Summary state for bottom taskbar
+  const [aiSummary, setAiSummary] = useState<string>('Ask AI anything or manage tasks...');
+  const [loadingSummary, setLoadingSummary] = useState<boolean>(false);
+
+  useEffect(() => {
+    const fetchSummary = async () => {
+      try {
+        setLoadingSummary(true);
+        const data = await api.getDailySummary();
+        if (data && data.summary) {
+          setAiSummary(data.summary);
+        }
+        setLoadingSummary(false);
+      } catch {
+        setLoadingSummary(false);
+      }
+    };
+    fetchSummary();
+  }, []);
 
   // Pull to refresh & horizontal swipe states
   const [pullStartY, setPullStartY] = useState<number | null>(null);
@@ -370,7 +392,7 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="flex-1 overflow-y-auto p-4 space-y-4 relative"
+        className="flex-1 overflow-y-auto p-4 space-y-4 relative pb-24"
       >
         {/* Pull to refresh visual indicator banner */}
         {(pullDistance > 0 || isRefreshing) && (
@@ -538,23 +560,34 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
         </div>
       </div>
 
-      {/* 5. Floating Action Bar & AI Shortcuts */}
-      <div className="absolute bottom-5 right-5 flex flex-col items-end space-y-3 z-30">
-        {/* Floating AI Shortcut Pill */}
-        <button
+      {/* 5. Mobile Bottom AI Taskbar Attached to Screen Bottom */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#1E1B24]/95 backdrop-blur-xl border-t border-[#2B2930] px-3.5 py-2.5 flex items-center space-x-2.5 shadow-[0_-8px_30px_rgba(0,0,0,0.6)]">
+        {/* Floating AI Shortcut Taskbar Input Pill */}
+        <div
           onClick={onOpenAIChat}
-          className="flex items-center space-x-2 px-4 py-2.5 rounded-full bg-[#2B2930] text-[#D0BCFF] border border-[#36343B] text-xs font-semibold shadow-lg hover:bg-[#36343B] active:scale-95 transition-all"
+          className="flex-1 flex items-center space-x-2.5 bg-[#2B2930] hover:bg-[#36343B] active:scale-[0.99] border border-[#3D3A45] rounded-full px-3.5 py-2 text-[#CAC4D0] cursor-pointer transition-all shadow-inner group"
         >
-          <Sparkles className="w-4 h-4" />
-          <span>Ask AI</span>
-        </button>
+          <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-blue-500 flex items-center justify-center shadow-md shrink-0">
+            {loadingSummary ? (
+              <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
+            )}
+          </div>
+          <span className="text-xs font-medium text-[#CAC4D0] group-hover:text-[#E6E1E5] truncate flex-1">
+            {loadingSummary ? 'Analyzing daily summary...' : aiSummary}
+          </span>
+          <div className="px-2.5 py-1 rounded-full bg-[#381E72] text-[#D0BCFF] text-[10px] font-bold tracking-wide uppercase shrink-0 border border-[#4F378B]">
+            Ask AI
+          </div>
+        </div>
 
-        {/* Primary Material 3 Floating Action Button (FAB) matching Screenshot 3 */}
+        {/* Primary Material 3 Floating Action Button (FAB) */}
         <button
           onClick={() => setShowQuickAdd(true)}
-          className="w-14 h-14 rounded-2xl bg-[#E8DEF8] text-[#1D1B20] flex items-center justify-center shadow-2xl hover:bg-[#D0BCFF] active:scale-95 transition-all"
+          className="w-11 h-11 rounded-2xl bg-[#E8DEF8] text-[#1D1B20] flex items-center justify-center shadow-lg hover:bg-[#D0BCFF] active:scale-95 transition-all shrink-0"
         >
-          <Plus className="w-7 h-7" />
+          <Plus className="w-6 h-6" />
         </button>
       </div>
 

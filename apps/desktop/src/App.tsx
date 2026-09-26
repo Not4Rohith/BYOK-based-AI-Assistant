@@ -294,7 +294,7 @@ export function App() {
           onSendMessage={handleAskAI}
         />
       ) : showSettings ? (
-        <div className="h-full overflow-y-auto px-4 pt-10 pb-6 md:p-6 bg-[#141218]">
+        <div className="h-full overflow-y-auto px-4 pt-14 pb-6 md:p-6 bg-[#141218]">
           <div className="flex items-center justify-between pb-4 border-b border-[#2B2930] mb-4">
             <button
               onClick={() => setShowSettings(false)}
@@ -317,7 +317,7 @@ export function App() {
         </div>
       ) : activeView === 'memory' ? (
         <div className="h-full flex flex-col bg-[#141218]">
-          <div className="px-4 pt-10 pb-3 border-b border-[#2B2930] flex items-center justify-between">
+          <div className="px-4 pt-14 pb-3 border-b border-[#2B2930] flex items-center justify-between">
             <button
               onClick={() => setActiveView('all-tasks')}
               className="text-xs font-semibold text-[#D0BCFF] hover:underline"
