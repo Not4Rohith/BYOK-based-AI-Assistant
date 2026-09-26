@@ -42,7 +42,7 @@ export class OpenRouterProvider implements AIProvider {
             model,
             messages: payloadMessages,
             temperature: request.temperature ?? 0.7,
-            max_tokens: request.maxTokens ?? 150,
+            max_tokens: request.maxTokens ?? 4096,
           }),
         });
 

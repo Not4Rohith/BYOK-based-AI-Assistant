@@ -288,7 +288,7 @@ export class AIService {
               model: modelToUse,
               messages: payloadMessages,
               temperature: 0.7,
-              max_tokens: 250,
+              max_tokens: 4096,
             }),
           });
 

@@ -74,8 +74,8 @@ export class LangGraphAgentEngine {
       const modelName = candidateModels[candidateIdx];
       console.log(`[LangGraphAgentEngine] 🤖 Candidate Model [${candidateIdx + 1}/${candidateModels.length}]: "${modelName}"`);
 
-      // Try tokens limit candidate tiers (150 -> 100 -> 60) to recover from OpenRouter 402 max_tokens credit limits
-      const maxTokenTiers = [150, 100, 60];
+      // Generous max token limit tiers (4096 -> 2048 -> 1024) to ensure responses never get truncated
+      const maxTokenTiers = [4096, 2048, 1024];
 
       for (let tierIdx = 0; tierIdx < maxTokenTiers.length; tierIdx++) {
         const currentMaxTokens = maxTokenTiers[tierIdx];

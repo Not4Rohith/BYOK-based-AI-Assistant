@@ -245,7 +245,7 @@ Goal: Write a single, motivating, 1-sentence headline (max 18 words) for the use
               },
             },
             temperature: 0.5,
-            maxTokens: 50,
+            maxTokens: 2048,
           });
 
           const response = await llm.invoke(promptText);
