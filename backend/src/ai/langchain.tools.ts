@@ -62,14 +62,19 @@ export function createLangChainTools(taskService?: TaskService) {
   const createTaskTool = tool(
     async (input) => {
       if (!taskService) return 'Task service unavailable.';
+      const allLists = await taskListService.getAllLists();
       let listId = input.listId;
 
       if (!listId || !listId.startsWith('list_')) {
-        const targetTitle = input.listTitle || input.listId || 'Basic Info';
-        const matchedList = (await taskListService.getAllLists()).find(
-          (l) => l.title.toLowerCase() === targetTitle.toLowerCase()
-        );
-        listId = matchedList ? matchedList._id : 'list_basic_info';
+        const targetTitle = input.listTitle || input.listId;
+        if (targetTitle) {
+          const matchedList = allLists.find(
+            (l) => l.title.toLowerCase().trim() === targetTitle.toLowerCase().trim()
+          );
+          listId = matchedList ? matchedList._id : (allLists[0]?._id || undefined);
+        } else {
+          listId = allLists[0]?._id || undefined;
+        }
       }
 
       const created = await taskService.createTask({
@@ -119,11 +124,15 @@ export function createLangChainTools(taskService?: TaskService) {
       for (const item of tasks) {
         let listId = item.listId;
         if (!listId || !listId.startsWith('list_')) {
-          const targetTitle = item.listTitle || item.listId || 'Basic Info';
-          const matchedList = allLists.find(
-            (l) => l.title.toLowerCase() === targetTitle.toLowerCase()
-          );
-          listId = matchedList ? matchedList._id : 'list_basic_info';
+          const targetTitle = item.listTitle || item.listId;
+          if (targetTitle) {
+            const matchedList = allLists.find(
+              (l) => l.title.toLowerCase().trim() === targetTitle.toLowerCase().trim()
+            );
+            listId = matchedList ? matchedList._id : (allLists[0]?._id || undefined);
+          } else {
+            listId = allLists[0]?._id || undefined;
+          }
         }
 
         const created = await taskService.createTask({

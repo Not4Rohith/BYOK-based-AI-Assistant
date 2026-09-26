@@ -25,7 +25,7 @@ export class TaskListService {
       }).sort({ createdAt: 1 });
       if (existingDocs.length === 0) {
         const defaultDoc = await TaskListModel.create({
-          _id: 'list_1',
+          _id: 'list_default',
           userId: 'usr_1',
           title: 'My Tasks',
         });
@@ -36,7 +36,7 @@ export class TaskListService {
 
     if (this.inMemoryLists.length === 0) {
       this.inMemoryLists = [{
-        _id: 'list_1',
+        _id: 'list_default',
         userId: 'usr_1',
         title: 'My Tasks',
         createdAt: nowIso,

@@ -260,7 +260,8 @@ export function App() {
 
         if (lower.includes('add') || lower.includes('study') || lower.includes('buy')) {
           aiReply = `I've created a new task "${promptText}" under your active Google Tasks list.`;
-          handleAddTask(taskLists[0]?._id ?? 'list_basic_info', promptText);
+          const defaultList = taskLists[0]?._id;
+          if (defaultList) handleAddTask(defaultList, promptText);
         }
 
         const aiMsg: ChatMessage = {
@@ -379,8 +380,8 @@ export function App() {
                 onDeleteList={handleDeleteList}
                 onCreateList={handleCreateList}
                 onCreateTask={() => {
-                  const defaultList = taskLists[0]?._id ?? 'list_basic_info';
-                  handleAddTask(defaultList, 'New Task');
+                  const defaultList = taskLists[0]?._id;
+                  if (defaultList) handleAddTask(defaultList, 'New Task');
                 }}
                 onOpenSettings={() => setShowSettings(true)}
               />

@@ -190,26 +190,26 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
   const currentList = taskLists.find((l) => l._id === activeListId) || taskLists[0];
   const currentListId = (isStarTab || isAllTasksTab) ? '' : (currentList?._id || '');
 
-  const knownListIds = new Set(taskLists.map((l) => l._id));
-
   const activeTasks = isStarTab
     ? tasks.filter((t) => t.starred && t.status !== 'completed')
     : isAllTasksTab
       ? tasks.filter((t) => t.status !== 'completed')
-      : tasks.filter((t) => (t.listId === currentListId || !t.listId || !knownListIds.has(t.listId)) && t.status !== 'completed');
+      : tasks.filter((t) => t.listId === currentListId && t.status !== 'completed');
 
   const completedTasks = isStarTab
     ? tasks.filter((t) => t.starred && t.status === 'completed')
     : isAllTasksTab
       ? tasks.filter((t) => t.status === 'completed')
-      : tasks.filter((t) => (t.listId === currentListId || !t.listId || !knownListIds.has(t.listId)) && t.status === 'completed');
+      : tasks.filter((t) => t.listId === currentListId && t.status === 'completed');
 
   const handleSaveQuickTask = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!quickTitle.trim()) return;
 
-    const listTarget = currentListId || taskLists[0]?._id || 'list_basic_info';
-    onAddTask(listTarget, quickTitle.trim());
+    const listTarget = currentListId || taskLists[0]?._id;
+    if (listTarget) {
+      onAddTask(listTarget, quickTitle.trim());
+    }
 
     if (quickDetails.trim() || quickStarred) {
       setTimeout(() => {
