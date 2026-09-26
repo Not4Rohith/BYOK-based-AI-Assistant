@@ -1,5 +1,30 @@
 import { LayaRoutingResult } from './routing.types.js';
 
+// Semantic Concept Dictionaries for Intent Normalization
+const CREATE_VERBS = [
+  'create', 'add', 'schedule', 'generate', 'suggest', 'put', 'insert',
+  'build', 'setup', 'set up', 'organize', 'draft', 'make', 'populate',
+  'list', 'prepare', 'construct', 'formulate', 'assign', 'fill in',
+  'lay out', 'write down', 'break down', 'plan', 'structure'
+];
+
+const TASK_NOUNS = [
+  'task', 'tasks', 'to-do', 'to-dos', 'todos', 'todo', 'item', 'items',
+  'checklist', 'agenda', 'schedule', 'plan', 'work', 'job', 'jobs',
+  'activity', 'activities', 'things to do', 'duties', 'goals',
+  'assignments', 'routine'
+];
+
+const COMPLETE_VERBS = [
+  'mark', 'complete', 'finish', 'check off', 'check-off', 'done',
+  'tick off', 'tick-off', 'cross off', 'cross-off', 'wrap up', 'fulfill'
+];
+
+const DELETE_VERBS = [
+  'delete', 'remove', 'clear', 'erase', 'drop', 'cancel', 'get rid of',
+  'trash', 'discard'
+];
+
 export class LayaRuleEngine {
   public evaluateRules(prompt: string): LayaRoutingResult | null {
     const p = prompt.trim();
@@ -22,30 +47,82 @@ export class LayaRuleEngine {
       };
     }
 
-    // 2. Direct Task Completion
-    const completeMatch = lower.match(/^(?:mark|complete|check\s*off)\s+(?:task\s+)?(.+?)(?:\s+as\s+(?:done|completed))?$/i);
-    if (completeMatch && completeMatch[1]) {
-      const taskTitle = completeMatch[1].trim().replace(/^["']|["']$/g, '');
-      if (taskTitle.length > 0) {
-        return {
-          route: 'DIRECT',
-          operation: 'complete_task',
-          confidence: 0.98,
-          reasoningLevel: 'NONE',
-          promptModules: ['taskMutation'],
-          tools: ['complete_task'],
-          context: ['TASKS'],
-          history: false,
-          memory: false,
-          requiresClarification: false,
-          reason: 'Unambiguous direct task completion command',
-          parameters: { taskTitle },
-        };
+    // Semantic Intent Helper Checks
+    const hasCreateVerb = CREATE_VERBS.some((v) => lower.includes(v));
+    const hasTaskNoun = TASK_NOUNS.some((n) => lower.includes(n));
+    const hasCompleteVerb = COMPLETE_VERBS.some((v) => lower.includes(v));
+    const hasDeleteVerb = DELETE_VERBS.some((v) => lower.includes(v));
+
+    // 2. Semantic Task Completion Intent
+    if (hasCompleteVerb) {
+      for (const verb of COMPLETE_VERBS) {
+        if (lower.includes(verb)) {
+          const idx = lower.indexOf(verb);
+          const rawTarget = p.substring(idx + verb.length).replace(/^(?:task|the task|as done|as completed|as finished|\s)+/i, '').trim();
+          const taskTitle = rawTarget.replace(/^["']|["']$/g, '');
+          if (taskTitle.length > 0) {
+            return {
+              route: 'DIRECT',
+              operation: 'complete_task',
+              confidence: 0.98,
+              reasoningLevel: 'NONE',
+              promptModules: ['taskMutation'],
+              tools: ['complete_task'],
+              context: ['TASKS'],
+              history: false,
+              memory: false,
+              requiresClarification: false,
+              reason: `Semantic match for task completion (verb: ${verb})`,
+              parameters: { taskTitle },
+            };
+          }
+        }
       }
     }
 
-    // 3. Direct Task Queries & Agenda
-    if (/^(show|get|list|view|display)\s+(?:my\s+)?(?:all\s+)?tasks$/i.test(p) || lower === 'tasks') {
+    // 3. Semantic Task Deletion Intent
+    if (hasDeleteVerb) {
+      for (const verb of DELETE_VERBS) {
+        if (lower.includes(verb)) {
+          const idx = lower.indexOf(verb);
+          const rawTarget = p.substring(idx + verb.length).replace(/^(?:task|the task|\s)+/i, '').trim();
+          const target = rawTarget.replace(/^["']|["']$/g, '');
+          if (target === 'that' || target === 'it' || target.length === 0) {
+            return {
+              route: 'DIRECT',
+              operation: 'delete_task',
+              confidence: 0.5,
+              reasoningLevel: 'LOW',
+              promptModules: ['taskDeletion'],
+              tools: ['delete_task'],
+              context: ['TASKS'],
+              history: true,
+              memory: false,
+              requiresClarification: true,
+              reason: 'Ambiguous task deletion target',
+              parameters: {},
+            };
+          }
+          return {
+            route: 'DIRECT',
+            operation: 'delete_task',
+            confidence: 0.95,
+            reasoningLevel: 'NONE',
+            promptModules: ['taskDeletion'],
+            tools: ['delete_task'],
+            context: ['TASKS'],
+            history: false,
+            memory: false,
+            requiresClarification: false,
+            reason: `Semantic match for task deletion (verb: ${verb})`,
+            parameters: { taskTitle: target },
+          };
+        }
+      }
+    }
+
+    // 4. Semantic Task Query & Agenda Intent
+    if (/^(show|get|list|view|display|fetch|retrieve|see)\s+(?:my\s+)?(?:all\s+)?tasks$/i.test(p) || lower === 'tasks' || lower === 'my tasks') {
       return {
         route: 'DIRECT',
         operation: 'get_tasks',
@@ -57,12 +134,12 @@ export class LayaRuleEngine {
         history: false,
         memory: false,
         requiresClarification: false,
-        reason: 'Direct task list retrieval request',
+        reason: 'Semantic task list retrieval request',
         parameters: { filter: 'pending' },
       };
     }
 
-    if (/^(show|get|view|display)\s+(?:my\s+)?(?:today'?s?\s+)?agenda$/i.test(p) || lower === 'agenda' || lower === "today's agenda") {
+    if (/^(show|get|view|display|fetch)\s+(?:my\s+)?(?:today'?s?\s+)?agenda$/i.test(p) || lower === 'agenda' || lower === "today's agenda") {
       return {
         route: 'DIRECT',
         operation: 'get_today_agenda',
@@ -74,20 +151,25 @@ export class LayaRuleEngine {
         history: false,
         memory: false,
         requiresClarification: false,
-        reason: 'Direct today agenda retrieval request',
+        reason: 'Semantic today agenda retrieval request',
         parameters: {},
       };
     }
 
-    // 4. Multi-Task Creation / Dynamic Goal Breakdown (Agent Route)
-    if (
-      /^(?:create|add|schedule|generate|suggest|break\s+down)\s+(?:all\s+)?(?:necessary\s+)?tasks?\b/i.test(p) ||
-      lower.includes('add all necessary tasks') ||
-      lower.includes('add tasks') ||
-      lower.includes('create tasks') ||
-      lower.includes('suggest tasks') ||
-      lower.includes('generate tasks')
-    ) {
+    // 5. Semantic Multi-Task Creation / Dynamic Goal Breakdown (Agent Route)
+    // Matches ANY prompt that combines a creation verb with task nouns or temporal planning concepts
+    const isMultiTaskCreationIntent =
+      (hasCreateVerb && hasTaskNoun) ||
+      lower.includes('checklist') ||
+      lower.includes('to-dos') ||
+      lower.includes('todos') ||
+      lower.includes('what i need to do') ||
+      lower.includes('what i ought to do') ||
+      lower.includes('things for me today') ||
+      lower.includes('my daily schedule') ||
+      lower.includes('plan for today');
+
+    if (isMultiTaskCreationIntent && !lower.startsWith('add task ') && !lower.startsWith('create task ')) {
       return {
         route: 'AGENT',
         confidence: 0.95,
@@ -98,13 +180,13 @@ export class LayaRuleEngine {
         history: false,
         memory: false,
         requiresClarification: false,
-        reason: 'Multi-task creation / dynamic planning prompt requiring tool calls',
+        reason: 'Semantic multi-task creation & dynamic planning intent detected',
         parameters: {},
       };
     }
 
-    // 5. Direct Single Task Creation
-    const createMatch = lower.match(/^(?:create|add|schedule)\s+(?:a\s+)?task\s+(?:called|named\s+|:\s*)?(.+)$/i);
+    // 6. Direct Single Task Creation
+    const createMatch = lower.match(/^(?:create|add|schedule|insert|put)\s+(?:a\s+)?task\s+(?:called|named\s+|:\s*)?(.+)$/i);
     if (createMatch && createMatch[1]) {
       const rawTitle = createMatch[1].trim().replace(/^["']|["']$/g, '');
       if (rawTitle.length > 0 && !rawTitle.toLowerCase().startsWith('tasks')) {
@@ -125,81 +207,8 @@ export class LayaRuleEngine {
       }
     }
 
-    // 6. Direct Task Deletion
-    const deleteMatch = lower.match(/^(?:delete|remove)\s+(?:the\s+)?task\s+(.+)$/i);
-    if (deleteMatch && deleteMatch[1]) {
-      const target = deleteMatch[1].trim().replace(/^["']|["']$/g, '');
-      if (target === 'that' || target === 'it' || target.length === 0) {
-        return {
-          route: 'DIRECT',
-          operation: 'delete_task',
-          confidence: 0.5,
-          reasoningLevel: 'LOW',
-          promptModules: ['taskDeletion'],
-          tools: ['delete_task'],
-          context: ['TASKS'],
-          history: true,
-          memory: false,
-          requiresClarification: true,
-          reason: 'Ambiguous task deletion target requires user clarification',
-          parameters: {},
-        };
-      }
-      return {
-        route: 'DIRECT',
-        operation: 'delete_task',
-        confidence: 0.95,
-        reasoningLevel: 'NONE',
-        promptModules: ['taskDeletion'],
-        tools: ['delete_task'],
-        context: ['TASKS'],
-        history: false,
-        memory: false,
-        requiresClarification: false,
-        reason: 'Direct single task deletion command',
-        parameters: { taskTitle: target },
-      };
-    }
-
-    // 7. Direct List / Category Operations
-    const createListMatch = lower.match(/^(?:create|add)\s+(?:a\s+)?(?:category|list)\s+(?:called|named\s+)?(.+)$/i);
-    if (createListMatch && createListMatch[1]) {
-      const listTitle = createListMatch[1].trim().replace(/^["']|["']$/g, '');
-      return {
-        route: 'DIRECT',
-        operation: 'create_list',
-        confidence: 0.95,
-        reasoningLevel: 'NONE',
-        promptModules: ['lists'],
-        tools: ['create_list'],
-        context: ['TASK_LISTS'],
-        history: false,
-        memory: false,
-        requiresClarification: false,
-        reason: 'Direct category creation command',
-        parameters: { title: listTitle },
-      };
-    }
-
-    if (/^(show|get|view|list)\s+(?:my\s+)?(?:categories|lists)$/i.test(p) || lower === 'lists' || lower === 'categories') {
-      return {
-        route: 'DIRECT',
-        operation: 'get_lists',
-        confidence: 0.98,
-        reasoningLevel: 'NONE',
-        promptModules: ['lists'],
-        tools: ['get_lists'],
-        context: ['TASK_LISTS'],
-        history: false,
-        memory: false,
-        requiresClarification: false,
-        reason: 'Direct lists retrieval request',
-        parameters: {},
-      };
-    }
-
-    // 8. Direct Replanning
-    if (/^(replan\s+my\s+day|replan\s+schedule|auto\s+replan)$/i.test(p)) {
+    // 7. Direct Replanning Intent
+    if (/^(replan\s+my\s+day|replan\s+schedule|auto\s+replan|reschedule\s+today)$/i.test(p)) {
       return {
         route: 'DIRECT',
         operation: 'replan_day',
@@ -216,13 +225,12 @@ export class LayaRuleEngine {
       };
     }
 
-    // 9. Simple LLM Reasoning (Summarization, Focus Advice, Task Queries)
+    // 8. Simple Read-Only Reasoning (Summarization, Focus Advice)
     if (
       lower.includes('which task should i prioritize') ||
       lower.includes('why is my schedule overloaded') ||
       lower.includes('summarize my tasks') ||
-      lower.includes('help me decide what to work on') ||
-      lower.includes('which of my tasks are related')
+      lower.includes('help me decide what to work on')
     ) {
       return {
         route: 'SIMPLE_LLM',
@@ -234,33 +242,12 @@ export class LayaRuleEngine {
         history: false,
         memory: true,
         requiresClarification: false,
-        reason: 'Lightweight reasoning / prioritization request suitable for single LLM call',
+        reason: 'Lightweight read-only reasoning request suitable for single LLM call',
         parameters: {},
       };
     }
 
-    // 10. Multi-step Agentic Replanning
-    if (
-      lower.includes('reorganize my entire day') ||
-      lower.includes('create a complete study plan') ||
-      lower.includes('clean up my task system')
-    ) {
-      return {
-        route: 'AGENT',
-        confidence: 0.95,
-        reasoningLevel: 'HIGH',
-        promptModules: ['base', 'scheduling', 'prioritization', 'agentReasoning'],
-        tools: ['get_tasks', 'get_today_agenda', 'replan_day', 'update_task', 'bulk_update_tasks', 'create_task'],
-        context: ['TASKS', 'TODAY_AGENDA', 'USER_PREFERENCES', 'GOALS'],
-        history: true,
-        memory: true,
-        requiresClarification: false,
-        reason: 'Multi-step complex replanning / restructuring request requiring LangGraph agent',
-        parameters: {},
-      };
-    }
-
-    return null; // Fallback to LLM classifier if no rule matched
+    return null; // Fallback to semantic LLM classifier if rule confidence is uncertain
   }
 }
 
