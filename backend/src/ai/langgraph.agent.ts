@@ -34,7 +34,7 @@ export class LangGraphAgentEngine {
       .filter((m, i, arr) => m.length > 0 && arr.indexOf(m) === i);
 
     // Filter tools to ONLY those selected by Laya router
-    const tools = selectedTools && selectedTools.length > 0
+    const tools = selectedTools !== undefined
       ? toolSelector.selectTools(selectedTools, taskService)
       : createLangChainTools(taskService);
     const toolNode = new ToolNode(tools);
@@ -63,7 +63,7 @@ export class LangGraphAgentEngine {
       timeContext,
     });
 
-    const isSimpleGreeting = !selectedTools?.length && /^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you)[\s!?.]*$/i.test(userPrompt.trim());
+    const isSimpleGreeting = (selectedTools !== undefined && selectedTools.length === 0) || /^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you)[\s!?.]*$/i.test(userPrompt.trim());
 
     let finalResponseText = '';
     const executedToolLogs: any[] = [];
@@ -80,7 +80,7 @@ export class LangGraphAgentEngine {
       for (let tierIdx = 0; tierIdx < maxTokenTiers.length; tierIdx++) {
         const currentMaxTokens = maxTokenTiers[tierIdx];
         try {
-          console.log(`[LangGraphAgentEngine] Executing graph with model "${modelName}" (maxTokens=${currentMaxTokens}, isGreeting=${isSimpleGreeting})...`);
+          console.log(`[LangGraphAgentEngine] Executing graph with model "${modelName}" (maxTokens=${currentMaxTokens}, isGreeting=${isSimpleGreeting}, toolCount=${tools.length})...`);
 
           const llm = new ChatOpenAI({
             model: modelName,
@@ -104,8 +104,8 @@ export class LangGraphAgentEngine {
             },
           });
 
-          // For simple greetings, bypass heavy tool schema binding to save ~2,500 prompt tokens
-          const activeModel = isSimpleGreeting ? llm : llm.bindTools(tools);
+          // For simple greetings or 0 tools, bypass heavy tool schema binding to save ~2,500 prompt tokens
+          const activeModel = (isSimpleGreeting || tools.length === 0) ? llm : llm.bindTools(tools);
 
           // Custom router preventing infinite duplicate tool loops
           const smartToolsCondition = (state: typeof MessagesAnnotation.State) => {
@@ -199,30 +199,24 @@ export class LangGraphAgentEngine {
 
           finalResponseText = responseTextCandidate || 'Completed your request.';
 
-          // Aggregate token usage across turns
+          // Aggregate token usage cleanly (take max input_tokens per turn to avoid double counting cumulative metrics)
           let promptTokens = 0;
           let completionTokens = 0;
-          let totalTokens = 0;
 
           for (const msg of finalState.messages) {
             const aiMsg = msg as any;
-            if (aiMsg.usage_metadata) {
-              promptTokens += aiMsg.usage_metadata.input_tokens || 0;
-              completionTokens += aiMsg.usage_metadata.output_tokens || 0;
-              totalTokens += aiMsg.usage_metadata.total_tokens || 0;
-            }
-
-            const resMeta = aiMsg.response_metadata || {};
-            const tu = resMeta.tokenUsage || resMeta.usage || resMeta.token_usage;
-            if (tu && !aiMsg.usage_metadata) {
-              const p = tu.promptTokens || tu.prompt_tokens || tu.input_tokens || 0;
-              const c = tu.completionTokens || tu.completion_tokens || tu.output_tokens || 0;
-              const t = tu.totalTokens || tu.total_tokens || (p + c);
-              promptTokens += p;
-              completionTokens += c;
-              totalTokens += t;
+            if (aiMsg._getType && aiMsg._getType() === 'ai') {
+              const usage = aiMsg.usage_metadata || aiMsg.response_metadata?.tokenUsage || aiMsg.response_metadata?.usage;
+              if (usage) {
+                const p = usage.input_tokens || usage.prompt_tokens || usage.promptTokens || 0;
+                const c = usage.output_tokens || usage.completion_tokens || usage.completionTokens || 0;
+                if (p > promptTokens) promptTokens = p;
+                completionTokens += c;
+              }
             }
           }
+
+          let totalTokens = promptTokens + completionTokens;
 
           // Fallback estimate if model provider omitted token usage headers
           if (totalTokens === 0) {
