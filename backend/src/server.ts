@@ -41,7 +41,7 @@ const analyticsService = new AnalyticsService(taskService, goalService, memorySe
 // Start async initialization server boot sequence
 async function startServer() {
   // 1. Connect to MongoDB Atlas
-  const mongoUri = aiService.getConfig().mongoUri;
+  const mongoUri = aiService.getConfig().mongoUri || process.env.MONGODB_URI || '';
   const connected = await dbConnection.connect(mongoUri);
   if (connected) {
     try {

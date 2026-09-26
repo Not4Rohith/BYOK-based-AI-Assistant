@@ -50,14 +50,31 @@ export class AIService {
   }
 
   private loadConfig(): void {
+    const envMongoUri = process.env.MONGODB_URI || '';
+    const envOpenRouterKey = process.env.OPENROUTER_API_KEY || '';
+
     try {
       if (fs.existsSync(CONFIG_FILE_PATH)) {
         const fileData = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
         const parsed = JSON.parse(fileData);
         this.config = { ...this.config, ...parsed };
+      } else {
+        // Auto-generate empty template ai-config.json if missing on disk
+        if (envMongoUri) this.config.mongoUri = envMongoUri;
+        if (envOpenRouterKey) this.config.openrouter.apiKey = envOpenRouterKey;
+        this.saveConfig();
+        console.log('[AIService] Auto-generated backend/data/ai-config.json file.');
       }
     } catch (err) {
       console.warn('[AIService] Failed to load persisted AI config:', err);
+    }
+
+    // Override from environment variables if set in cloud environment
+    if (envMongoUri) {
+      this.config.mongoUri = envMongoUri;
+    }
+    if (envOpenRouterKey) {
+      this.config.openrouter.apiKey = envOpenRouterKey;
     }
   }
 
