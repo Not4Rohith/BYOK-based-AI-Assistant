@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, User, ArrowLeft, Send, Info, X, Database, Cpu, Wrench, Sparkles, MessageSquare, History, Calendar, CheckSquare, Brain } from 'lucide-react';
+import { Bot, User, ArrowLeft, Send, Info, X, Database, Cpu, Wrench, Sparkles, MessageSquare, History, Calendar, CheckSquare, Brain, ClipboardList, RefreshCw } from 'lucide-react';
 import { ChatMessage, ChatSession } from '@ai-task-manager/shared-types';
 import { FormattedMarkdown } from './FormattedMarkdown';
 import { api } from '../api/client';
@@ -28,6 +28,35 @@ export const FullScreenChat: React.FC<FullScreenChatProps> = ({
   const userJustSentRef = useRef<boolean>(false);
 
   const [detailModalMsg, setDetailModalMsg] = useState<ChatMessage | null>(null);
+
+  const [showScratchpad, setShowScratchpad] = useState<boolean>(false);
+  const [scratchpadData, setScratchpadData] = useState<{
+    active: boolean;
+    pendingAction?: any;
+    dataContent?: string | null;
+    timestamp?: string;
+  } | null>(null);
+  const [isLoadingScratchpad, setIsLoadingScratchpad] = useState<boolean>(false);
+
+  const fetchScratchpad = async () => {
+    setIsLoadingScratchpad(true);
+    try {
+      const res = await api.getScratchpad(selectedSessionId || undefined);
+      if (res) {
+        setScratchpadData(res);
+      }
+    } catch (err) {
+      console.error('Failed to fetch scratchpad state:', err);
+    } finally {
+      setIsLoadingScratchpad(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchScratchpad();
+    const interval = setInterval(fetchScratchpad, 3000);
+    return () => clearInterval(interval);
+  }, [selectedSessionId]);
 
   useEffect(() => {
     if (!selectedSessionId) {
@@ -131,7 +160,132 @@ export const FullScreenChat: React.FC<FullScreenChatProps> = ({
           </button>
 
           <div className="flex items-center space-x-2">
+            {/* Scratchpad Button - Top Right Corner with List Symbol ONLY (no words) */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setShowScratchpad(!showScratchpad);
+                  fetchScratchpad();
+                }}
+                title="Scratchpad View"
+                className={`p-2 rounded-xl border transition-all relative flex items-center justify-center cursor-pointer ${
+                  showScratchpad
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                    : scratchpadData?.active
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+                    : 'bg-[#2A2B32] text-slate-300 hover:text-white border-white/10 hover:bg-[#34353E]'
+                }`}
+              >
+                <ClipboardList className={`w-4.5 h-4.5 ${scratchpadData?.active ? 'text-amber-400' : 'text-slate-300'}`} />
+                {scratchpadData?.active && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.9)]" />
+                )}
+              </button>
 
+              {/* Scratchpad Inspector Popover */}
+              {showScratchpad && (
+                <div className="absolute right-0 top-12 w-96 bg-[#252528] border border-white/10 rounded-xl shadow-2xl z-50 p-4 font-sans text-sm text-[#e3e3e3] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+                    <div className="flex items-center space-x-2">
+                      <ClipboardList className="w-4.5 h-4.5 text-amber-400" />
+                      <span className="font-semibold text-[#e3e3e3]">Scratchpad Inspector</span>
+                      {scratchpadData?.active ? (
+                        <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded-full">
+                          Empty
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <button
+                        onClick={fetchScratchpad}
+                        className="p-1 text-slate-400 hover:text-white rounded hover:bg-white/10 transition-colors"
+                        title="Refresh scratchpad state"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isLoadingScratchpad ? 'animate-spin text-amber-400' : ''}`} />
+                      </button>
+                      <button
+                        onClick={() => setShowScratchpad(false)}
+                        className="p-1 text-slate-400 hover:text-white rounded hover:bg-white/10 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Body Content */}
+                  {scratchpadData?.active ? (
+                    <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                      {scratchpadData.pendingAction && (
+                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 space-y-1.5">
+                          <div className="text-xs font-semibold text-amber-300 uppercase tracking-wide">
+                            Pending Confirmation Action
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-400">Operation:</span>
+                            <span className="font-mono text-amber-200 font-medium">
+                              {scratchpadData.pendingAction.operation}
+                            </span>
+                          </div>
+                          {scratchpadData.pendingAction.tools && (
+                            <div className="text-xs">
+                              <span className="text-slate-400">Bound Tools: </span>
+                              <span className="font-mono text-slate-200">
+                                {scratchpadData.pendingAction.tools.join(', ')}
+                              </span>
+                            </div>
+                          )}
+                          {scratchpadData.pendingAction.reason && (
+                            <div className="text-xs text-slate-300 italic pt-1 border-t border-amber-500/20">
+                              "{scratchpadData.pendingAction.reason}"
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {scratchpadData.dataContent && (
+                        <div className="bg-slate-800/80 border border-white/10 rounded-lg p-3 space-y-1">
+                          <div className="text-xs font-semibold text-blue-300 uppercase tracking-wide">
+                            Stored Memory Summary
+                          </div>
+                          <pre className="text-xs font-mono text-slate-200 whitespace-pre-wrap break-all bg-black/30 p-2 rounded max-h-40 overflow-y-auto">
+                            {scratchpadData.dataContent}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Raw JSON Debug View */}
+                      <details className="text-xs text-slate-400">
+                        <summary className="cursor-pointer hover:text-slate-200 py-1 font-mono text-[11px]">
+                          View raw JSON scratchpad payload
+                        </summary>
+                        <pre className="mt-1 font-mono text-[10px] text-emerald-400 bg-black/40 p-2 rounded border border-white/5 overflow-x-auto">
+                          {JSON.stringify(scratchpadData, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center text-slate-400 space-y-2">
+                      <ClipboardList className="w-8 h-8 text-slate-600 mx-auto opacity-50" />
+                      <p className="text-xs font-medium text-slate-400">Scratchpad is currently empty</p>
+                      <p className="text-[11px] text-slate-500 px-4">
+                        When high-risk operations or memory summaries are staged on the transient scratchpad, they appear live here.
+                      </p>
+                    </div>
+                  )}
+
+                  {scratchpadData?.timestamp && (
+                    <div className="mt-3 pt-2 border-t border-white/5 text-[10px] text-slate-500 flex justify-between items-center">
+                      <span>Checked: {new Date(scratchpadData.timestamp).toLocaleTimeString()}</span>
+                      <span className="text-amber-400/80 font-mono font-medium">Transient State</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Mobile Chat Sessions Toggle */}
             <button

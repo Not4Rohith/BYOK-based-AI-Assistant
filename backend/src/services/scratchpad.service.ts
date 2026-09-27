@@ -33,9 +33,12 @@ export class TransientScratchpadService {
   /**
    * Peek at the pending action without flushing.
    */
-  public getPendingAction(sessionId: string): PendingActionState | null {
+  public getPendingAction(sessionId?: string): PendingActionState | null {
     const key = sessionId || 'default';
-    const state = this.store.get(key);
+    let state = this.store.get(key);
+    if (!state && this.store.size > 0) {
+      state = Array.from(this.store.values())[0];
+    }
     if (!state || !state.pendingAction) return null;
     return state.pendingAction;
   }
@@ -43,14 +46,22 @@ export class TransientScratchpadService {
   /**
    * One-time read: Retrieves and atomicaly flushes the pending action.
    */
-  public consumePendingAction(sessionId: string): PendingActionState | null {
+  public consumePendingAction(sessionId?: string): PendingActionState | null {
     const key = sessionId || 'default';
-    const state = this.store.get(key);
+    let stateKey = key;
+    let state = this.store.get(key);
+    if (!state && this.store.size > 0) {
+      const firstEntry = Array.from(this.store.entries())[0];
+      if (firstEntry) {
+        stateKey = firstEntry[0];
+        state = firstEntry[1];
+      }
+    }
     if (!state || !state.pendingAction) return null;
 
     const action = state.pendingAction;
-    this.store.delete(key);
-    console.log(`[ScratchpadService] 🧹 Consumed & flushed pending action for session "${key}":`, action.operation);
+    this.store.delete(stateKey);
+    console.log(`[ScratchpadService] 🧹 Consumed & flushed pending action for session "${stateKey}":`, action.operation);
     return action;
   }
 

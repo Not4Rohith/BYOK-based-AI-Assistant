@@ -80,4 +80,3 @@ export const GoogleHeader: React.FC<GoogleHeaderProps> = ({
     </header>
   );
 };
-

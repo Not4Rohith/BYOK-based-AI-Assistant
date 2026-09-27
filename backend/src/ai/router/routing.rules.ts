@@ -104,6 +104,7 @@ export class LayaRuleEngine {
 
       return {
         route: 'SIMPLE_LLM',
+        operation: 'delete_all_tasks',
         confidence: 0.98,
         reasoningLevel: 'NONE',
         promptModules: ['taskDeletion'],
@@ -136,6 +137,7 @@ export class LayaRuleEngine {
 
             return {
               route: 'SIMPLE_LLM',
+              operation: 'delete_all_tasks',
               confidence: 0.98,
               reasoningLevel: 'NONE',
               promptModules: ['taskDeletion'],

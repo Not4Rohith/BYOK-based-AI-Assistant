@@ -182,23 +182,7 @@ export class AIService {
         sessionId: activeSession._id,
       });
 
-      // Safety guard: Elevate SIMPLE_LLM to AGENT if action tools are present or prompt implies task creation/action
-      if (decision.route === 'SIMPLE_LLM') {
-        const actionTools = ['create_task', 'batch_create_tasks', 'update_task', 'complete_task', 'delete_task', 'replan_day', 'create_list', 'bulk_update_tasks'];
-        const hasActionTool = decision.tools && decision.tools.some((t) => actionTools.includes(t));
-        const startsWithAction = /^(?:create|add|schedule|delete|remove|update|complete|replan)\b/i.test(userPrompt.trim());
 
-        if (hasActionTool || startsWithAction) {
-          console.log(`[AIService] 🔄 SIMPLE_LLM route was assigned, but action tools/prompt require tool execution. Elevating to AGENT route...`);
-          decision.route = 'AGENT';
-          if (!decision.tools || decision.tools.length === 0) {
-            decision.tools = ['create_task', 'batch_create_tasks', 'get_tasks', 'get_today_agenda', 'replan_day'];
-          }
-          if (!decision.promptModules || decision.promptModules.length === 0) {
-            decision.promptModules = ['base', 'taskCreation', 'scheduling', 'agentReasoning'];
-          }
-        }
-      }
 
       const telemetry: LayaTelemetryMetrics = {
         route: decision.route,
@@ -216,8 +200,17 @@ export class AIService {
       // ROUTE 1 — SINGLE_TOOL & AGENT (AI execution with selected tools via LangGraph engine)
       if (decision.route === 'SINGLE_TOOL' || decision.route === 'AGENT') {
         console.log(`[AIService] 🛠️ Route ${decision.route} selected (Operation=${decision.operation || 'none'}, Tools=[${decision.tools.join(', ')}]). Executing AI tool runner...`);
+
+        let effectivePrompt = userPrompt;
+        if (
+          decision.reason?.includes('Confirmed pending scratchpad action') ||
+          (decision.operation === 'delete_all_tasks' && /^(yes|yeah|yep|sure|confirm|ok|okay|do it)[\s!?.]*$/i.test(userPrompt.trim()))
+        ) {
+          effectivePrompt = `[USER CONFIRMED ACTION]: The user explicitly replied "${userPrompt}" to confirm executing the operation: ${decision.operation || 'delete_all_tasks'}. Immediately call the tool ${decision.tools.join(', ')} now to perform this action and report the final result to the user.`;
+        }
+
         const agentResult = await langGraphAgentEngine.processMessage(
-          userPrompt,
+          effectivePrompt,
           chatHistory,
           this.config,
           this.taskService,
@@ -228,6 +221,19 @@ export class AIService {
         );
         responseText = agentResult.responseText;
         toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
+
+        // Fail-safe execution for delete_all_tasks if LLM did not invoke delete_all_tasks tool
+        if (decision.operation === 'delete_all_tasks' && toolCalls.length === 0 && this.taskService) {
+          console.warn('[AIService] ⚠️ LLM did not invoke delete_all_tasks tool automatically. Triggering direct execution fallback...');
+          const deletedCount = await this.taskService.deleteAllTasks();
+          toolCalls.push({
+            tool: 'delete_all_tasks',
+            args: {},
+            status: 'success',
+          });
+          responseText = `All ${deletedCount} tasks have been permanently deleted from your task board as confirmed.`;
+        }
+
         telemetry.latencyMs = Date.now() - startTime;
         agentMetadata = {
           ...(agentResult.metadata || {}),
@@ -266,6 +272,10 @@ export class AIService {
         }
         if (loadedContext.memories && loadedContext.memories.length > 0) {
           contextSummary += `\nUser Memory Context: ${JSON.stringify(loadedContext.memories.slice(0, 5).map((m) => m.content))}`;
+        }
+
+        if (decision.requiresClarification || (decision.reason && decision.reason.includes('confirmation'))) {
+          contextSummary += `\n\n[SYSTEM NOTICE]: The user is attempting a high-risk operation (${decision.operation || 'bulk deletion'}). You must ask the user for confirmation. Ask clearly: "Are you sure you want to delete ALL tasks from your board? Reply with 'yes' to confirm or 'no' to cancel." Do NOT state that tools are missing or unavailable.`;
         }
 
         const candidateModels = [this.config.openrouter?.defaultModel, ...(this.config.openrouter?.fallbackModels || [])].filter(Boolean);

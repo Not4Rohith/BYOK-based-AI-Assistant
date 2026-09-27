@@ -1,6 +1,6 @@
 # BYOK-Based Personal AI Task Assistant
 
-A cross-platform (Desktop & Mobile) AI-powered personal task manager and agentic assistant built with React, Vite, Tailwind CSS, Tauri v2, LangChain/LangGraph, and MongoDB Atlas.
+A cross-platform (Desktop & Mobile) AI-powered personal task manager and agentic assistant built with React, Vite, Tailwind CSS, Tauri v2, LangChain/LangGraph, Laya and MongoDB Atlas.
 
 ---
 

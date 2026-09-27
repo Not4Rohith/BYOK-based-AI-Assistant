@@ -22,6 +22,23 @@ export function createChatRouter(aiService: AIService): Router {
     res.json({ success: true, data: msgs });
   });
 
+  router.get('/scratchpad', async (req: Request, res: Response) => {
+    const { transientScratchpadService } = await import('../services/scratchpad.service.js');
+    const { transientScratchpad } = await import('../ai/scratchpad.js');
+    const sessionId = (req.query.sessionId as string) || undefined;
+    const pendingAction = transientScratchpadService.getPendingAction(sessionId);
+    const dataContent = transientScratchpad.peek();
+    const active = Boolean(pendingAction || dataContent);
+    res.json({
+      success: true,
+      active,
+      sessionId: sessionId || 'default',
+      pendingAction: pendingAction || null,
+      dataContent: dataContent || null,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   router.get('/daily-summary', async (req: Request, res: Response) => {
     const { aiAgentRunner } = await import('../services/aiAgentRunner.js');
     const force = req.query.force === 'true';

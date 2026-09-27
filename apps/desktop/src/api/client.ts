@@ -216,6 +216,15 @@ export const api = {
   getChatSessions: () => fetchJson<ChatSession[]>(`${getApiBaseUrl()}/chat/sessions`),
   getSessionMessages: (sessionId: string) => fetchJson<ChatMessage[]>(`${getApiBaseUrl()}/chat/sessions/${sessionId}/messages`),
   getDailySummary: () => fetchJson<{ summary: string }>(`${getApiBaseUrl()}/chat/daily-summary`),
+  getScratchpad: (sessionId?: string) =>
+    fetchJson<{
+      success: boolean;
+      active: boolean;
+      sessionId: string;
+      pendingAction: any | null;
+      dataContent: string | null;
+      timestamp: string;
+    }>(`${getApiBaseUrl()}/chat/scratchpad${sessionId ? `?sessionId=${sessionId}` : ''}`),
 
   sendChatMessage: async (message: string, sessionId?: string, localTime?: string) => {
     const cachedConf = offlineCache.getCachedAIConfig();
