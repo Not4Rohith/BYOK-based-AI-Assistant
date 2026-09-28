@@ -12,10 +12,14 @@ A **higher-performance, native Rust-powered version** (`src-tauri/src`) is curre
 ## 🚀 Key Features
 
 - **Bring Your Own Key (BYOK)**: Full control over your AI provider credentials (OpenRouter, Gemini, Grok).
+- **Fast Router LLM API Layer (Above Laya)**: Fast pre-classification API layer above Laya (`Fast Router LLM`) that dynamically analyzes user intent, determines required capability, extracts required context, and selects required prompt modules before handing off execution to Laya.
 - **Laya Decision Router**: Fast, token-efficient AI decision router that dynamically selects relevant tools and prompt modules (`SINGLE_TOOL`, `SIMPLE_LLM`, `AGENT`).
+- **Dynamic Prompt & Schedule Chunker**: Dynamic semantic and time-aware prompt chunking engine (`DynamicPromptChunker`) that parses long custom system prompts and daily schedules into structured chunks, injecting only the necessary sections into the context window to maximize token efficiency.
+- **Multi-Provider Dynamic Fallback Engine**: Cross-provider fallback support in `LangGraphAgentEngine` spanning OpenRouter, Grok (`xAI`), and Gemini. Automatically resolves provider credentials, API keys, base URLs (`https://api.x.ai/v1`, Google Gemini OpenAI endpoint, OpenRouter), model ID sanitizations, and smoothly transitions to backup models on `429 Rate Limit Exceeded` or provider errors.
+- **Async Modular Prompt Composer**: Asynchronously stiches together modular prompt layers (`base`, `taskQuery`, `taskMutation`, `taskDeletion`, `scheduling`, `agentReasoning`) tailored specifically to the user's intent.
 - **One-Time Transient Scratchpad**: Token-efficient confirmation flows (e.g., bulk task deletion, high-risk operations) without wasting chat tokens on heavy history dumps.
 - **Autonomous AI Agent**: LangGraph-inspired agent engine with tool calling (`get_tasks`, `get_lists`, `create_task`, `complete_task`, `delete_all_tasks`, `replan_day`, `auto_memory_extraction`).
-- **Dynamic Model Selection**: Select any AI model dynamically (OpenRouter, Gemini, Grok) directly in the app.
+- **Dynamic Model Selection**: Select any AI model dynamically (OpenRouter, Gemini, Grok) directly in the app settings.
 - **MongoDB Atlas Integration**: Cloud sync for tasks, categories, goals, long-term memories, and chat sessions.
 
 ---

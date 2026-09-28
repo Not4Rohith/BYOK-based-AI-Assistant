@@ -56,10 +56,12 @@ export const FloatingAIPanel: React.FC<FloatingAIPanelProps> = ({
   useEffect(() => {
     if (isOpen) {
       fetchScratchpad();
-      const interval = setInterval(fetchScratchpad, 3000);
-      return () => clearInterval(interval);
+      if (showScratchpad) {
+        const interval = setInterval(fetchScratchpad, 5000);
+        return () => clearInterval(interval);
+      }
     }
-  }, [isOpen, selectedSessionId]);
+  }, [isOpen, showScratchpad, selectedSessionId, sessionMessages.length]);
 
   // Load chat sessions and tiered memory when panel opens
   useEffect(() => {

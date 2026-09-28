@@ -11,7 +11,7 @@ import { chatStorageService } from './chatStorage.service.js';
 import { langGraphAgentEngine } from '../ai/langgraph.agent.js';
 import { layaRouter } from '../ai/router/laya.router.js';
 import { contextSelector } from '../ai/context/selector.js';
-import { composeSystemPrompt } from '../ai/prompts/composer.js';
+import { composeSystemPrompt, composeSystemPromptAsync } from '../ai/prompts/composer.js';
 import { LayaTelemetryMetrics } from '../ai/router/routing.types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -237,6 +237,7 @@ export class AIService {
         telemetry.latencyMs = Date.now() - startTime;
         agentMetadata = {
           ...(agentResult.metadata || {}),
+          layaDecision: decision,
           telemetry,
         };
       }
@@ -249,10 +250,11 @@ export class AIService {
         const openrouterKey = (this.config.openrouter?.apiKey || '').trim();
         const timeContext = localTime || new Date().toLocaleString();
 
-        const systemPromptText = composeSystemPrompt(decision.promptModules, {
+        const systemPromptText = await composeSystemPromptAsync(decision.promptModules, {
           systemPrompt: this.config.systemPrompt,
           dailySchedule: this.config.dailySchedule,
           timeContext,
+          userQuery: userPrompt,
         });
 
         const loadedContext = await contextSelector.loadContext(decision.context, {
@@ -318,6 +320,7 @@ export class AIService {
               model: modelToUse,
               provider: 'openrouter',
               tokenUsage: telemetry.llmTokens,
+              layaDecision: decision,
               telemetry,
             };
           } else {

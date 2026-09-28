@@ -54,9 +54,11 @@ export const FullScreenChat: React.FC<FullScreenChatProps> = ({
 
   useEffect(() => {
     fetchScratchpad();
-    const interval = setInterval(fetchScratchpad, 3000);
-    return () => clearInterval(interval);
-  }, [selectedSessionId]);
+    if (showScratchpad) {
+      const interval = setInterval(fetchScratchpad, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [showScratchpad, selectedSessionId, sessionMessages.length]);
 
   useEffect(() => {
     if (!selectedSessionId) {
@@ -529,6 +531,54 @@ export const FullScreenChat: React.FC<FullScreenChatProps> = ({
                         )}
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Laya Layer Pipeline Inspection */}
+              {detailModalMsg.metadata?.layaDecision && (
+                <div className="p-3 bg-[#1b1b1b] rounded-xl border border-indigo-500/20 space-y-2">
+                  <div className="text-xs font-bold text-indigo-400 flex items-center justify-between">
+                    <span className="flex items-center space-x-1">
+                      <Brain className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>LAYA PIPELINE ROUTING DECISION</span>
+                    </span>
+                    <span className="font-mono text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      {detailModalMsg.metadata.layaDecision.route}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 text-[11px] pt-1.5 border-t border-white/5 font-mono">
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="text-slate-400">Operation:</span>
+                      <span className="text-amber-300 font-bold">{detailModalMsg.metadata.layaDecision.operation || 'none'}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="text-slate-400">Confidence:</span>
+                      <span className="text-emerald-300">{Math.round((detailModalMsg.metadata.layaDecision.confidence || 0.95) * 100)}%</span>
+                    </div>
+                    <div className="flex flex-col space-y-0.5">
+                      <span className="text-slate-400">Selected Prompt Modules:</span>
+                      <span className="text-blue-300 text-[10px] bg-black/40 p-1.5 rounded break-all">
+                        {JSON.stringify(detailModalMsg.metadata.layaDecision.promptModules || [])}
+                      </span>
+                    </div>
+                    <div className="flex flex-col space-y-0.5">
+                      <span className="text-slate-400">Allowed Tool Schemas:</span>
+                      <span className="text-amber-300 text-[10px] bg-black/40 p-1.5 rounded break-all">
+                        {JSON.stringify(detailModalMsg.metadata.layaDecision.tools || [])}
+                      </span>
+                    </div>
+                    <div className="flex flex-col space-y-0.5">
+                      <span className="text-slate-400">Loaded DB Context:</span>
+                      <span className="text-indigo-300 text-[10px] bg-black/40 p-1.5 rounded break-all">
+                        {JSON.stringify(detailModalMsg.metadata.layaDecision.context || [])}
+                      </span>
+                    </div>
+                    {detailModalMsg.metadata.layaDecision.reason && (
+                      <div className="text-[10px] text-slate-400 italic pt-1 border-t border-white/5">
+                        Reason: "{detailModalMsg.metadata.layaDecision.reason}"
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

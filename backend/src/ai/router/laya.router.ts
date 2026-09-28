@@ -62,17 +62,17 @@ export class LayaRouter {
       return ruleMatch;
     }
 
-    // 2. Fast lightweight semantic fallback for complex prompts
+    // 2. Fast lightweight semantic classifier for all intents (Fast Router LLM)
     const openrouterKey = options.openrouterApiKey?.trim();
     if (openrouterKey) {
       try {
-        console.log('[LayaRouter] 🔍 Executing lightweight semantic classification...');
+        console.log('[LayaRouter] 🔍 Executing Fast Router LLM Semantic Classifier...');
         const classifierPrompt = `You are Laya, an ultra-fast typed decision router for an AI Task Manager.
-Analyze the user prompt and respond with ONLY a raw valid JSON object without codeblocks:
+Analyze the user prompt and respond with ONLY a raw valid JSON object without markdown codeblocks:
 {
   "route": "SIMPLE_LLM" | "SINGLE_TOOL" | "AGENT",
   "operation": "get_tasks" | "create_task" | "update_task" | "complete_task" | "delete_task" | "delete_all_tasks" | "replan_day" | "get_lists" | "create_list" | "none",
-  "confidence": 0.85,
+  "confidence": 0.95,
   "reasoningLevel": "NONE" | "LOW" | "MEDIUM" | "HIGH",
   "promptModules": ["base", "taskQuery", "taskMutation", "taskCreation", "taskDeletion", "scheduling", "prioritization"],
   "tools": ["get_tasks", "get_lists", "complete_task", "create_task", "delete_task", "delete_all_tasks", "replan_day"],
@@ -80,20 +80,41 @@ Analyze the user prompt and respond with ONLY a raw valid JSON object without co
   "history": false,
   "memory": false,
   "requiresClarification": false,
-  "reason": "Short summary",
+  "reason": "Short intent summary",
   "parameters": {}
 }
 
-CRITICAL ROUTING RULES:
-1. If the user prompt asks to show, list, or view task lists/categories (e.g. "list all lists", "show lists", "categories"), set route to SINGLE_TOOL and operation to "get_lists".
-2. If the user prompt asks to delete all tasks, clear all tasks, or delete everything, set route to SINGLE_TOOL and operation to "delete_all_tasks".
-3. If the user prompt is a single ambiguous word (e.g. "all", "delete", "list", "show", "what"), DO NOT route to SINGLE_TOOL or call get_tasks. Set route to SIMPLE_LLM, operation to "none", and tools to [].
-4. If the user prompt asks to CREATE, ADD, EDIT, COMPLETE, DELETE, or REPLAN tasks/categories, set route to AGENT or SINGLE_TOOL.
-5. SIMPLE_LLM is strictly reserved for greetings ("hello", "hi"), casual conversation, ambiguous short words, and pure informational advice where NO tool actions are performed.
+CRITICAL ROUTING & CONTEXT RULES:
+1. PLANNING & SCHEDULING (e.g. "plan my day", "i haven't done anything today", "schedule my time", "what should I do now"):
+   - Set "route": "AGENT"
+   - Set "operation": "replan_day"
+   - Set "context": ["TASKS", "TODAY_AGENDA"]
+   - Set "tools": ["get_tasks", "replan_day"]
+   - Set "promptModules": ["base", "taskQuery", "scheduling", "prioritization"]
+
+2. VIEW / QUERY TASKS (e.g. "show my tasks", "list tasks", "what's on my board"):
+   - Set "route": "SINGLE_TOOL"
+   - Set "operation": "get_tasks"
+   - Set "context": ["TASKS"]
+   - Set "tools": ["get_tasks"]
+
+3. CREATE / ADD TASKS (e.g. "remind me to buy milk", "add a task"):
+   - Set "route": "SINGLE_TOOL" or "AGENT"
+   - Set "operation": "create_task"
+   - Set "context": ["TASKS"]
+   - Set "tools": ["create_task"]
+
+4. SIMPLE_LLM is strictly reserved for pure greetings ("hello", "hi"), casual small talk, or general non-task informational advice where NO database context or tools are required.
 
 User Prompt: "${trimmed}"`;
 
-        const modelToUse = options.defaultModel?.trim() || 'openrouter/auto';
+        const candidateModels = [
+          options.defaultModel?.trim(),
+          'google/gemini-2.5-flash',
+          'openrouter/auto',
+        ].filter((m): m is string => Boolean(m && typeof m === 'string'));
+
+        const modelToUse = candidateModels[0] || 'google/gemini-2.5-flash';
         const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -117,11 +138,11 @@ User Prompt: "${trimmed}"`;
           const parsed = JSON.parse(cleaned) as LayaRoutingResult;
 
           if (parsed && (parsed.route === 'SINGLE_TOOL' || parsed.route === 'SIMPLE_LLM' || parsed.route === 'AGENT')) {
-            console.log(`[LayaRouter] 🧠 Semantic LLM Classification: Route=${parsed.route} | Operation=${parsed.operation || 'none'} | Confidence=${parsed.confidence}`);
+            console.log(`[LayaRouter] 🧠 Fast Router LLM Match: Route=${parsed.route} | Operation=${parsed.operation || 'none'} | Context=[${(parsed.context || []).join(', ')}] | Confidence=${parsed.confidence}`);
             return {
               route: parsed.route,
               operation: parsed.operation || undefined,
-              confidence: Number(parsed.confidence) || 0.85,
+              confidence: Number(parsed.confidence) || 0.95,
               reasoningLevel: parsed.reasoningLevel || 'LOW',
               promptModules: (parsed.promptModules || ['base']) as any,
               tools: parsed.tools || [],
@@ -129,13 +150,13 @@ User Prompt: "${trimmed}"`;
               history: Boolean(parsed.history),
               memory: Boolean(parsed.memory),
               requiresClarification: Boolean(parsed.requiresClarification),
-              reason: parsed.reason || 'Semantic classification',
+              reason: parsed.reason || 'Fast Router LLM semantic classification',
               parameters: parsed.parameters || {},
             };
           }
         }
       } catch (err) {
-        console.warn('[LayaRouter] Lightweight classifier fallback warning:', (err as Error).message);
+        console.warn('[LayaRouter] Fast Router LLM classification fallback warning:', (err as Error).message);
       }
     }
 

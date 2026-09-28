@@ -3,32 +3,7 @@ import { mobileSecureStore, SecureCredentials } from './secureStore';
 
 export class MobileStorageService {
   private tasks: Task[] = [
-    {
-      _id: 'mob_task_1',
-      userId: 'usr_1',
-      title: 'College Lectures',
-      description: 'Classes: DBMS, Computer Networks',
-      status: 'pending',
-      priority: 'high',
-      estimatedMinutes: 420,
-      scheduledStart: '2026-09-15T09:00:00+05:30',
-      scheduledEnd: '2026-09-15T16:00:00+05:30',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      _id: 'mob_task_2',
-      userId: 'usr_1',
-      title: 'Finish DBMS Assignment',
-      description: 'Relational algebra & indexing',
-      status: 'pending',
-      priority: 'high',
-      estimatedMinutes: 60,
-      scheduledStart: '2026-09-15T16:30:00+05:30',
-      scheduledEnd: '2026-09-15T17:30:00+05:30',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
+
   ];
 
   public async saveEncryptedCredentials(creds: SecureCredentials): Promise<void> {
