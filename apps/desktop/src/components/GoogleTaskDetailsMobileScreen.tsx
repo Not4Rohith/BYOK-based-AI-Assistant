@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { Task, TaskList } from '@ai-task-manager/shared-types';
 import { GoogleMoveCategorySheet } from './GoogleMoveCategorySheet';
 import { GoogleDatePopover } from './GoogleDatePopover';
+import { GoogleRepeatModal } from './GoogleRepeatModal';
 import {
   ArrowLeft,
   Star,
   MoreVertical,
   AlignLeft,
   Clock,
+  Repeat,
+  Flag,
   CornerDownRight,
   ChevronDown,
   Trash2,
@@ -46,6 +49,7 @@ export const GoogleTaskDetailsMobileScreen: React.FC<GoogleTaskDetailsMobileScre
   const [description, setDescription] = useState(task.description || '');
   const [showMoveCategorySheet, setShowMoveCategorySheet] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showRepeatModal, setShowRepeatModal] = useState(false);
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
   const [newSubtaskText, setNewSubtaskText] = useState('');
 
@@ -202,6 +206,64 @@ export const GoogleTaskDetailsMobileScreen: React.FC<GoogleTaskDetailsMobileScre
           </button>
         </div>
 
+        {/* Repeat / Recurrence Row */}
+        <div className="flex items-center space-x-4">
+          <Repeat className="w-5 h-5 text-[#CAC4D0] shrink-0" />
+          <button
+            onClick={() => setShowRepeatModal(true)}
+            className="flex-1 text-left text-sm text-[#CAC4D0] hover:text-[#E6E1E5] transition-colors py-1 flex items-center justify-between"
+          >
+            {task.recurrence?.enabled && task.recurrence?.rule ? (
+              <span className="text-[#D0BCFF] font-medium flex items-center space-x-1.5">
+                <span>Repeats ({task.recurrence.rule.replace(/^FREQ=/i, '').toLowerCase()})</span>
+              </span>
+            ) : (
+              <span>Repeat</span>
+            )}
+            {task.recurrence?.enabled && task.recurrence?.rule && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpdateTask(task._id, { recurrence: { enabled: false, rule: null as any, timezone: 'Asia/Kolkata' } });
+                }}
+                className="text-[#CAC4D0] hover:text-[#F2B8B5] p-1"
+                title="Remove repeat"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </button>
+        </div>
+
+        {/* Priority Row */}
+        <div className="flex items-center space-x-4">
+          <Flag className="w-5 h-5 text-[#CAC4D0] shrink-0" />
+          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+            {(['low', 'medium', 'high'] as const).map((p) => {
+              const isSelected = (task.priority || 'medium') === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => onUpdateTask(task._id, { priority: p })}
+                  className={`px-3 py-1 rounded-full text-xs font-medium capitalize transition-all ${
+                    isSelected
+                      ? p === 'high'
+                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
+                        : p === 'medium'
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                      : 'bg-[#2B2930] text-[#CAC4D0] border border-transparent hover:border-[#36343B]'
+                  }`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Subtasks Section (Screenshot 13: ↳ Subtasks, ◯ Enter title with ✕) */}
         <div className="space-y-3">
           <div className="flex items-center space-x-4 text-[#CAC4D0]">
@@ -323,6 +385,26 @@ export const GoogleTaskDetailsMobileScreen: React.FC<GoogleTaskDetailsMobileScre
           position={{ top: 120, left: 20 }}
           onClose={() => setShowDatePicker(false)}
           onSave={(scheduledStart) => onUpdateTask(task._id, { scheduledStart })}
+        />
+      )}
+
+      {/* Repeat Configuration Modal */}
+      {showRepeatModal && (
+        <GoogleRepeatModal
+          isOpen={showRepeatModal}
+          initialRule={task.recurrence?.rule || undefined}
+          onClose={() => setShowRepeatModal(false)}
+          onSave={(rule) =>
+            onUpdateTask(task._id, {
+              recurrence: rule
+                ? {
+                    enabled: true,
+                    rule,
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  }
+                : undefined,
+            })
+          }
         />
       )}
     </div>

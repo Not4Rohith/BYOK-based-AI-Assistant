@@ -12,17 +12,24 @@ const STORAGE_KEYS = {
 export class OfflineCacheManager {
   // Server URL Cache
   public getServerUrl(): string {
+    const isMobileDevice = typeof window !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator?.userAgent || '');
+
     try {
       const url = localStorage.getItem(STORAGE_KEYS.SERVER_URL);
-      if (url && url.trim()) return url.trim();
+      if (url && url.trim()) {
+        const trimmed = url.trim();
+        // If on desktop but localStorage has a stale LAN IP, prefer localhost
+        if (!isMobileDevice && (trimmed.includes('10.') || trimmed.includes('192.168.'))) {
+          return 'http://localhost:3001/api';
+        }
+        return trimmed;
+      }
     } catch {}
-    // Default fallback: if running on mobile Android device, try host network IP
-    const isMobile = typeof window !== 'undefined' && (
-      !!(window as any).__TAURI_INTERNALS__ ||
-      /android/i.test(navigator?.userAgent || '')
-    );
-    if (isMobile) {
-      return 'http://10.143.32.161:3001/api';
+
+    // Default fallback:
+    if (isMobileDevice) {
+      // Android emulator loopback bridge or LAN IP
+      return 'http://10.0.2.2:3001/api';
     }
     return 'http://localhost:3001/api';
   }

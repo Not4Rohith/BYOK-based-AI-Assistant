@@ -204,22 +204,33 @@ export class AIAgentRunner {
       const config = aiService.getConfig();
 
       const openrouterKey = (config.openrouter?.apiKey || '').trim();
-      if (!openrouterKey) {
+      const geminiKey = (config.gemini?.apiKey || '').trim();
+      const grokKey = (config.grok?.apiKey || '').trim();
+      const activeProv = config.activeProvider || (geminiKey && !openrouterKey ? 'gemini' : grokKey && !openrouterKey ? 'grok' : 'openrouter');
+
+      if (!openrouterKey && !geminiKey && !grokKey) {
         const fallbackStr = `Cleared ${completed.length} task(s) today • ${pending.length} pending remaining`;
         this.latestDailySummary = fallbackStr;
         return fallbackStr;
       }
 
+      const activeConfig = config[activeProv] || (activeProv === 'gemini' ? config.gemini : activeProv === 'grok' ? config.grok : config.openrouter);
       const candidateModels = [
+        activeConfig?.defaultModel,
+        ...(activeConfig?.fallbackModels || []),
         config.openrouter?.defaultModel,
         ...(config.openrouter?.fallbackModels || []),
-        'openai/gpt-4o-mini',
-        'meta-llama/llama-3.3-70b-instruct',
-        'google/gemini-2.0-flash-001',
+        config.gemini?.defaultModel,
+        ...(config.gemini?.fallbackModels || []),
       ]
         .filter(Boolean)
         .map((m) => (m as string).replace(/^~/, '').trim())
         .filter((m, i, arr) => m && arr.indexOf(m) === i);
+
+      if (candidateModels.length === 0) {
+        if (geminiKey) candidateModels.push('gemini-1.5-flash');
+        else if (openrouterKey) candidateModels.push('google/gemini-2.0-flash-001');
+      }
 
       const promptText = `Analyze current task board:
 - Completed today (${completed.length}): ${completedTitles || 'None yet'}
@@ -231,21 +242,26 @@ Goal: Write a single, motivating, 1-sentence headline (max 18 words) for the use
       for (const modelName of candidateModels) {
         try {
           console.log(`[AIAgentRunner] Generating dynamic AI summary using model "${modelName}"...`);
+          const isGeminiDirect = activeProv === 'gemini' && Boolean(geminiKey);
+          const apiKeyToUse = isGeminiDirect ? geminiKey : openrouterKey || geminiKey || grokKey;
+          const baseURLToUse = isGeminiDirect ? 'https://generativelanguage.googleapis.com/v1beta/openai/' : 'https://openrouter.ai/api/v1';
+          const cleanModelName = isGeminiDirect ? modelName.replace(/^google\//, '') : modelName;
+
           const llm = new ChatOpenAI({
-            model: modelName,
-            modelName: modelName,
-            apiKey: openrouterKey,
-            openAIApiKey: openrouterKey,
+            model: cleanModelName,
+            modelName: cleanModelName,
+            apiKey: apiKeyToUse,
+            openAIApiKey: apiKeyToUse,
             configuration: {
-              apiKey: openrouterKey,
-              baseURL: 'https://openrouter.ai/api/v1',
+              apiKey: apiKeyToUse,
+              baseURL: baseURLToUse,
               defaultHeaders: {
                 'HTTP-Referer': 'https://aitaskmanager.app',
                 'X-Title': 'Personal AI Task Manager',
               },
             },
-            temperature: 0.5,
-            maxTokens: 2048,
+            temperature: 0.7,
+            maxTokens: 50,
           });
 
           const response = await llm.invoke(promptText);

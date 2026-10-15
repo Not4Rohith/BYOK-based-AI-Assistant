@@ -147,14 +147,6 @@ export const TOOL_REGISTRY: Record<string, ToolMetadata> = {
     requiredContext: ['TASK_LISTS', 'TASKS'],
     promptModules: ['lists'],
   },
-  replan_day: {
-    name: 'replan_day',
-    category: 'SCHEDULING',
-    risk: 'medium',
-    requiresLLM: false,
-    requiredContext: ['TASKS', 'TODAY_AGENDA', 'USER_PREFERENCES'],
-    promptModules: ['scheduling'],
-  },
   create_ai_agent_goal: {
     name: 'create_ai_agent_goal',
     category: 'AUTONOMOUS_AGENT',

@@ -18,6 +18,10 @@ import {
   AlignLeft,
   Check,
   FolderPlus,
+  Sparkles,
+  Flag,
+  X,
+  CornerDownRight,
 } from 'lucide-react';
 
 interface GoogleBoardViewProps {
@@ -33,6 +37,7 @@ interface GoogleBoardViewProps {
   onCreateList: (title: string) => void;
   onDeleteList: (listId: string) => void;
   onRenameList: (listId: string, newTitle: string) => void;
+  onAskAI?: (prompt: string) => void;
 }
 
 export const GoogleBoardView: React.FC<GoogleBoardViewProps> = ({
@@ -48,11 +53,45 @@ export const GoogleBoardView: React.FC<GoogleBoardViewProps> = ({
   onCreateList,
   onDeleteList,
   onRenameList,
+  onAskAI,
 }) => {
   const [addingListId, setAddingListId] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [expandedCompleted, setExpandedCompleted] = useState<Record<string, boolean>>({});
+
+  const handleDeleteSubtask = (taskId: string, subtaskId: string) => {
+    const task = tasks.find((t) => t._id === taskId);
+    if (!task) return;
+    const subtasks = (task.subtasks || []).filter((st) => (st._id || '') !== subtaskId);
+    onUpdateTask(taskId, { subtasks });
+  };
+
+  const getPriorityBadge = (priority?: string) => {
+    const p = priority || 'medium';
+    if (p === 'high') {
+      return (
+        <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 shrink-0">
+          <Flag className="w-2.5 h-2.5 text-rose-400" />
+          <span>High</span>
+        </span>
+      );
+    }
+    if (p === 'low') {
+      return (
+        <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
+          <Flag className="w-2.5 h-2.5 text-emerald-400" />
+          <span>Low</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 shrink-0">
+        <Flag className="w-2.5 h-2.5 text-blue-400" />
+        <span>Med</span>
+      </span>
+    );
+  };
 
   // List header options menu state
   const [listMenuId, setListMenuId] = useState<string | null>(null);
@@ -178,9 +217,14 @@ export const GoogleBoardView: React.FC<GoogleBoardViewProps> = ({
   return (
     <div className="h-full w-full overflow-x-auto p-6 flex items-start space-x-6 select-none relative transition-all duration-300">
       {listsToDisplay.map((list) => {
-        let listTasks = tasks.filter(
-          (t) => t.listId === list._id || t.tags?.includes(list._id)
-        );
+        let listTasks = tasks.filter((t) => {
+          if (t.listId === list._id || t.tags?.includes(list._id)) return true;
+          // Fallback: If task has no listId or its listId does not exist in taskLists, show it in the first list
+          if ((!t.listId || !taskLists.some((tl) => tl._id === t.listId)) && list._id === taskLists[0]?._id) {
+            return true;
+          }
+          return false;
+        });
         if (activeView === 'starred') {
           listTasks = listTasks.filter((t) => t.starred);
         }
@@ -260,18 +304,40 @@ export const GoogleBoardView: React.FC<GoogleBoardViewProps> = ({
                       placeholder="Title"
                       className="w-full bg-transparent text-xs text-[#e3e3e3] placeholder-slate-500 focus:outline-none"
                     />
+                    {onAskAI && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetTitle = newTaskTitle.trim();
+                          if (targetTitle) {
+                            onAddTask(list._id, targetTitle);
+                            onAskAI(`Break down and schedule the task "${targetTitle}"`);
+                            setNewTaskTitle('');
+                            setAddingListId(null);
+                          } else {
+                            const p = prompt('Ask AI to create or plan tasks:');
+                            if (p) onAskAI(p);
+                          }
+                        }}
+                        className="p-1 text-slate-400 hover:text-white transition-colors text-xs font-semibold px-2"
+                      >
+                        Add
+                      </button>
+                    )}
                   </div>
                 </form>
               ) : (
-                <button
-                  onClick={() => setAddingListId(list._id)}
-                  className="w-full flex items-center space-x-2.5 my-2 text-xs font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-2 rounded-xl transition-all"
-                >
-                  <div className="w-5 h-5 rounded-full border border-blue-400/40 flex items-center justify-center">
-                    <Plus className="w-3.5 h-3.5 text-blue-400" />
-                  </div>
-                  <span>Add a task</span>
-                </button>
+                <div className="flex items-center space-x-1.5 my-2">
+                  <button
+                    onClick={() => setAddingListId(list._id)}
+                    className="flex-1 flex items-center space-x-2.5 text-xs font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-2 rounded-xl transition-all"
+                  >
+                    <div className="w-5 h-5 rounded-full border border-blue-400/40 flex items-center justify-center">
+                      <Plus className="w-3.5 h-3.5 text-blue-400" />
+                    </div>
+                    <span>Add a task</span>
+                  </button>
+                </div>
               )}
 
               {/* Active Tasks List */}
@@ -331,60 +397,57 @@ export const GoogleBoardView: React.FC<GoogleBoardViewProps> = ({
                             {/* Subtasks count snippet when collapsed */}
                             {!isExpanded && task.subtasks && task.subtasks.length > 0 && (
                               <div className="mt-1 flex items-center space-x-1 text-[11px] text-slate-400 font-medium">
-                                <CheckCircle2 className="w-3 h-3 text-blue-400 shrink-0" />
+                                <CornerDownRight className="w-3 h-3 text-purple-400 shrink-0" />
                                 <span>
                                   {task.subtasks.filter((st) => st.completed).length}/{task.subtasks.length} subtasks
                                 </span>
                               </div>
                             )}
 
-                            {/* Date, Time & Repeat chip when collapsed (matching Google Tasks Tasks 5.html) */}
-                            {!isExpanded && (task.scheduledStart || task.dueAt || task.recurrence?.rule || task.recurrence?.enabled) && (
+                            {/* Chips when collapsed: Priority, Date/Time & Repeating */}
+                            {!isExpanded && (
                               <div className="mt-1.5 flex items-center space-x-1.5 flex-wrap gap-y-1">
-                                {(() => {
-                                  const isRepeating = !!(task.recurrence?.enabled || task.recurrence?.rule);
+                                {getPriorityBadge(task.priority)}
+
+                                {(task.scheduledStart || task.dueAt) && (() => {
                                   const dateIso = task.scheduledStart || task.dueAt;
-                                  let label = '';
-
-                                  if (dateIso) {
-                                    const d = new Date(dateIso);
-                                    const now = new Date();
-                                    const isToday = d.toDateString() === now.toDateString();
-
-                                    const tomorrow = new Date(now);
-                                    tomorrow.setDate(now.getDate() + 1);
-                                    const isTomorrow = d.toDateString() === tomorrow.toDateString();
-
-                                    const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
-                                    const timeStr = hasTime
-                                      ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-                                      : '';
-
-                                    let datePrefix = '';
-                                    if (isToday) datePrefix = 'Today';
-                                    else if (isTomorrow) datePrefix = 'Tomorrow';
-                                    else datePrefix = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-                                    label = timeStr ? `${datePrefix}, ${timeStr}` : datePrefix;
-                                  } else if (isRepeating) {
-                                    label = 'Repeating';
-                                  }
-
-                                  if (!label && !isRepeating) return null;
+                                  const d = new Date(dateIso!);
+                                  const now = new Date();
+                                  const isToday = d.toDateString() === now.toDateString();
+                                  const tomorrow = new Date(now);
+                                  tomorrow.setDate(now.getDate() + 1);
+                                  const isTomorrow = d.toDateString() === tomorrow.toDateString();
+                                  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+                                  const timeStr = hasTime ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+                                  let datePrefix = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                  const label = timeStr ? `${datePrefix}, ${timeStr}` : datePrefix;
 
                                   return (
                                     <button
+                                      type="button"
                                       onClick={(e) => openDatePopover(e, task._id)}
-                                      className="inline-flex items-center space-x-1.5 text-[11px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2.5 py-0.5 rounded-full font-medium hover:bg-blue-500/20 transition-colors"
+                                      className="inline-flex items-center space-x-1.5 text-[11px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2.5 py-0.5 rounded-full font-medium hover:bg-blue-500/20 transition-colors shrink-0"
                                     >
                                       <Calendar className="w-3 h-3 text-blue-400 shrink-0" />
                                       <span>{label}</span>
-                                      {isRepeating && (
-                                        <Repeat className="w-3 h-3 text-purple-400 shrink-0 ml-0.5" />
-                                      )}
                                     </button>
                                   );
                                 })()}
+
+                                {(task.recurrence?.enabled && task.recurrence?.rule) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setRepeatModalTaskId(task._id);
+                                    }}
+                                    className="inline-flex items-center space-x-1 text-[11px] text-purple-300 bg-purple-500/15 border border-purple-500/30 px-2 py-0.5 rounded-full font-medium hover:bg-purple-500/25 transition-colors shrink-0"
+                                    title="Edit recurrence rule"
+                                  >
+                                    <Repeat className="w-3 h-3 text-purple-400 shrink-0" />
+                                    <span>{task.recurrence.rule.replace(/^FREQ=/i, '').toLowerCase()}</span>
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -432,9 +495,39 @@ export const GoogleBoardView: React.FC<GoogleBoardViewProps> = ({
                             />
                           </div>
 
-                          {/* Interactive Pill Buttons: Date & Time */}
+                          {/* Priority Row */}
+                          <div className="flex items-center space-x-3 pl-6">
+                            <Flag className="w-4 h-4 text-slate-400 shrink-0" />
+                            <span className="text-xs text-slate-400">Priority:</span>
+                            <div className="flex items-center space-x-1.5">
+                              {(['low', 'medium', 'high'] as const).map((p) => {
+                                const isSelected = (task.priority || 'medium') === p;
+                                return (
+                                  <button
+                                    key={p}
+                                    type="button"
+                                    onClick={() => onUpdateTask(task._id, { priority: p })}
+                                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium capitalize transition-all ${
+                                      isSelected
+                                        ? p === 'high'
+                                          ? 'bg-rose-500/25 text-rose-300 border border-rose-500/50 shadow-sm'
+                                          : p === 'medium'
+                                          ? 'bg-blue-500/25 text-blue-300 border border-blue-500/50 shadow-sm'
+                                          : 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 shadow-sm'
+                                        : 'bg-[#1b1b1b] text-slate-400 border border-white/10 hover:border-white/20'
+                                    }`}
+                                  >
+                                    {p}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Interactive Pill Buttons: Date & Time, Repeat */}
                           <div className="flex items-center space-x-2 flex-wrap gap-y-1.5 pl-6">
                             <button
+                              type="button"
                               onClick={(e) => openDatePopover(e, task._id)}
                               className="flex items-center space-x-1.5 px-2.5 py-1 bg-[#1b1b1b] hover:bg-white/[0.08] border border-white/10 rounded-full text-[11px] text-blue-400 font-medium transition-colors"
                             >
@@ -444,70 +537,123 @@ export const GoogleBoardView: React.FC<GoogleBoardViewProps> = ({
                                   ? new Date(task.scheduledStart).toLocaleDateString('en-US', {
                                       month: 'short',
                                       day: 'numeric',
+                                      hour: 'numeric',
+                                      minute: '2-digit',
                                     })
                                   : 'Date/time'}
                               </span>
                             </button>
 
                             <button
+                              type="button"
                               onClick={() => setRepeatModalTaskId(task._id)}
                               className={`flex items-center space-x-1.5 px-2.5 py-1 border rounded-full text-[11px] font-medium transition-colors ${
-                                task.recurrence?.enabled || task.recurrence?.rule
-                                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                                task.recurrence?.enabled && task.recurrence?.rule
+                                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/30 hover:bg-purple-500/30'
                                   : 'bg-[#1b1b1b] hover:bg-white/[0.08] text-slate-400 border-white/10'
                               }`}
                             >
                               <Repeat className="w-3 h-3" />
-                              <span>{task.recurrence?.rule ? 'Repeating' : 'Repeat'}</span>
+                              <span>{task.recurrence?.enabled && task.recurrence?.rule ? `Repeats (${task.recurrence.rule.replace(/^FREQ=/i, '').toLowerCase()})` : 'Repeat'}</span>
                             </button>
+
+                            {task.recurrence?.enabled && task.recurrence?.rule && (
+                              <button
+                                type="button"
+                                onClick={() => onUpdateTask(task._id, { recurrence: { enabled: false, rule: null as any, timezone: 'Asia/Kolkata' } })}
+                                className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
+                                title="Remove repeat"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
 
-                          {/* Inline Date Picker Input when expanded */}
-                          {showDatePickerTaskId === task._id && (
-                            <div className="pl-6 flex items-center space-x-2 pt-1">
-                              <input
-                                type="date"
-                                value={
-                                  task.scheduledStart
-                                    ? new Date(task.scheduledStart).toISOString().substring(0, 10)
-                                    : ''
-                                }
-                                onChange={(e) => {
-                                  if (!e.target.value) {
-                                    onUpdateTask(task._id, { scheduledStart: undefined });
-                                  } else {
-                                    onUpdateTask(task._id, {
-                                      scheduledStart: new Date(`${e.target.value}T09:00:00`).toISOString(),
-                                    });
+                          {/* AI Assistant Quick Actions Row */}
+                          {onAskAI && (
+                            <div className="pl-6 pt-1 space-y-1.5">
+                              <div className="flex items-center space-x-1.5 text-xs font-semibold text-purple-300">
+                                <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                                <span>AI Assistant Quick Actions</span>
+                              </div>
+                              <div className="flex items-center space-x-2 flex-wrap gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onAskAI(`Break down the task "${task.title}" into actionable subtasks and add them to this task`)
                                   }
-                                }}
-                                className="bg-[#1b1b1b] border border-white/10 rounded-lg px-2.5 py-1 text-xs text-[#e3e3e3] focus:outline-none"
-                              />
+                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] bg-purple-500/10 hover:bg-purple-500/20 text-purple-200 border border-purple-500/20 transition-all active:scale-95"
+                                >
+                                  <span>✨ Break down subtasks</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onAskAI(`Estimate optimal duration and schedule for task "${task.title}"`)
+                                  }
+                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-200 border border-blue-500/20 transition-all active:scale-95"
+                                >
+                                  <span>⏱️ Estimate duration</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onAskAI(`Give high-impact next steps and suggestions to accomplish "${task.title}"`)
+                                  }
+                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-200 border border-indigo-500/20 transition-all active:scale-95"
+                                >
+                                  <span>💡 Next steps</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const p = prompt(`Ask AI about "${task.title}":`, `How should I prioritize and finish "${task.title}"?`);
+                                    if (p) onAskAI(p);
+                                  }}
+                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/10 transition-all active:scale-95"
+                                >
+                                  <span>💬 Ask AI...</span>
+                                </button>
+                              </div>
                             </div>
                           )}
 
                           {/* Subtasks Section */}
                           <div className="pl-6 pt-1 space-y-1.5">
-                            {(task.subtasks || []).map((st) => (
-                              <div
-                                key={st._id}
-                                className="flex items-center space-x-2 text-xs text-[#e3e3e3]"
-                              >
-                                <button
-                                  onClick={() => handleToggleSubtask(task._id, st._id || '')}
-                                  className="text-slate-400 hover:text-blue-400"
+                            {(task.subtasks || []).map((st, sIdx) => {
+                              const stId = st._id || `st_${sIdx}`;
+                              return (
+                                <div
+                                  key={stId}
+                                  className="flex items-center justify-between text-xs text-[#e3e3e3] group/st py-0.5"
                                 >
-                                  {st.completed ? (
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
-                                  ) : (
-                                    <Circle className="w-3.5 h-3.5 text-slate-500" />
-                                  )}
-                                </button>
-                                <span className={st.completed ? 'line-through text-slate-500' : ''}>
-                                  {st.title}
-                                </span>
-                              </div>
-                            ))}
+                                  <div className="flex items-center space-x-2 flex-1 min-w-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleSubtask(task._id, stId)}
+                                      className="text-slate-400 hover:text-blue-400 shrink-0"
+                                    >
+                                      {st.completed ? (
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+                                      ) : (
+                                        <Circle className="w-3.5 h-3.5 text-slate-500" />
+                                      )}
+                                    </button>
+                                    <span className={`truncate ${st.completed ? 'line-through text-slate-500' : ''}`}>
+                                      {st.title}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteSubtask(task._id, stId)}
+                                    className="opacity-0 group-hover/st:opacity-100 p-0.5 text-slate-500 hover:text-rose-400 transition-all shrink-0 ml-2"
+                                    title="Delete subtask"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              );
+                            })}
 
                             <form onSubmit={(e) => handleAddSubtask(task._id, e)} className="pt-1">
                               <div className="flex items-center space-x-2">

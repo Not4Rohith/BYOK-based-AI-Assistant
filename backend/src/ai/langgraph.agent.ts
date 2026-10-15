@@ -4,8 +4,12 @@ import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, AIMessage, SystemMessage, BaseMessage } from '@langchain/core/messages';
 import { AIProviderConfig, ChatMessage } from '@ai-task-manager/shared-types';
 import { TaskService } from '../services/task.service.js';
+import { MemoryService } from '../services/memory.service.js';
+import { GoalService } from '../services/goal.service.js';
 import { createLangChainTools } from './langchain.tools.js';
 import { toolSelector } from './tools/selector.js';
+import { contextSelector } from './context/selector.js';
+import { actionValidator } from './actions/validator.js';
 import { composeSystemPrompt, composeSystemPromptAsync } from './prompts/composer.js';
 import { PromptModuleKey, ContextCategory } from './router/routing.types.js';
 
@@ -25,50 +29,36 @@ function buildCandidateSpecs(config: AIProviderConfig): CandidateModelSpec[] {
     throw new Error('No AI provider API keys configured. Please configure an API key for OpenRouter, Grok, or Gemini in Settings.');
   }
 
+  const activeProv = (config.activeProvider as 'openrouter' | 'gemini' | 'grok') || (geminiKey ? 'gemini' : openrouterKey ? 'openrouter' : 'grok');
+  const allProviders: ('openrouter' | 'gemini' | 'grok')[] = ['gemini', 'openrouter', 'grok'];
+  const providerOrder: ('openrouter' | 'gemini' | 'grok')[] = [
+    activeProv,
+    ...allProviders.filter((p) => p !== activeProv),
+  ];
   const rawCandidates: { providerHint: 'openrouter' | 'grok' | 'gemini'; rawModel: string }[] = [];
 
-  // 1. OpenRouter models
-  if (config.openrouter?.defaultModel) {
-    rawCandidates.push({ providerHint: 'openrouter', rawModel: config.openrouter.defaultModel });
-  }
-  if (Array.isArray(config.openrouter?.fallbackModels)) {
-    config.openrouter.fallbackModels.forEach((m) => {
-      if (m) rawCandidates.push({ providerHint: 'openrouter', rawModel: m });
-    });
-  }
+  for (const prov of providerOrder) {
+    const provConfig = config[prov];
+    const key = prov === 'openrouter' ? openrouterKey : prov === 'gemini' ? geminiKey : grokKey;
+    const isEnabled = provConfig?.enabled !== false;
 
-  // 2. Grok models
-  if (config.grok?.defaultModel) {
-    rawCandidates.push({ providerHint: 'grok', rawModel: config.grok.defaultModel });
-  }
-  if (Array.isArray(config.grok?.fallbackModels)) {
-    config.grok.fallbackModels.forEach((m) => {
-      if (m) rawCandidates.push({ providerHint: 'grok', rawModel: m });
-    });
-  }
-
-  // 3. Gemini models
-  if (config.gemini?.defaultModel) {
-    rawCandidates.push({ providerHint: 'gemini', rawModel: config.gemini.defaultModel });
-  }
-  if (Array.isArray(config.gemini?.fallbackModels)) {
-    config.gemini.fallbackModels.forEach((m) => {
-      if (m) rawCandidates.push({ providerHint: 'gemini', rawModel: m });
-    });
+    if (isEnabled && (key || openrouterKey)) {
+      if (provConfig?.defaultModel) {
+        rawCandidates.push({ providerHint: prov, rawModel: provConfig.defaultModel });
+      }
+      if (Array.isArray(provConfig?.fallbackModels)) {
+        provConfig.fallbackModels.forEach((m) => {
+          if (m) rawCandidates.push({ providerHint: prov, rawModel: m });
+        });
+      }
+    }
   }
 
   const specs: CandidateModelSpec[] = [];
 
   for (const item of rawCandidates) {
-    let cleanModel = item.rawModel.replace(/^~/, '').trim();
+    const cleanModel = item.rawModel.replace(/^~/, '').trim();
     if (!cleanModel) continue;
-
-    // Sanitize known invalid/outdated model names
-    if (cleanModel === 'deepseek/deepseek-pro-latest') {
-      cleanModel = 'deepseek/deepseek-chat';
-    } else if (cleanModel === 'openrouter/free') {
-      cleanModel = 'openrouter/auto';
-    }
 
     const isGrokModel = item.providerHint === 'grok' || cleanModel.toLowerCase().includes('grok') || cleanModel.toLowerCase().startsWith('x-ai/');
     const isGeminiModel = item.providerHint === 'gemini' || cleanModel.toLowerCase().includes('gemini') || cleanModel.toLowerCase().startsWith('google/');
@@ -116,20 +106,6 @@ function buildCandidateSpecs(config: AIProviderConfig): CandidateModelSpec[] {
           provider: 'openrouter',
           apiKey: openrouterKey,
           baseURL: 'https://openrouter.ai/api/v1',
-        });
-      } else if (grokKey) {
-        specs.push({
-          model: 'grok-2-latest',
-          provider: 'grok',
-          apiKey: grokKey,
-          baseURL: 'https://api.x.ai/v1',
-        });
-      } else if (geminiKey) {
-        specs.push({
-          model: 'gemini-2.0-flash',
-          provider: 'gemini',
-          apiKey: geminiKey,
-          baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
         });
       }
     }
@@ -180,10 +156,13 @@ export class LangGraphAgentEngine {
     chatHistory: ChatMessage[],
     config: AIProviderConfig,
     taskService?: TaskService,
+    memoryService?: MemoryService,
+    goalService?: GoalService,
     localTime?: string,
     selectedTools?: string[],
     selectedPromptModules?: PromptModuleKey[],
-    selectedContext?: ContextCategory[]
+    selectedContext?: ContextCategory[],
+    userId?: string
   ): Promise<{ responseText: string; toolCallsExecuted: any[]; metadata?: Record<string, any> }> {
     const candidateSpecs = buildCandidateSpecs(config);
 
@@ -206,19 +185,93 @@ export class LangGraphAgentEngine {
         timeZoneName: 'short',
       });
 
+    // Load structured context payload selected by Laya Router
+    const contextPayload = await contextSelector.loadContext(selectedContext || ['TASKS'], {
+      userId,
+      taskService,
+      memoryService,
+      goalService,
+      dailySchedule: config.dailySchedule,
+      chatHistory,
+      localTime,
+      userPrompt,
+      sessionId: (config as any)?.sessionId || 'default',
+    });
+    console.log(
+      '[Planning Debug] USER_PREFERENCES:',
+      JSON.stringify(contextPayload.userPreferences, null, 2)
+    );
+
+    let contextSection = '';
+    if (contextPayload.currentTime) {
+      contextSection += `\n=== CURRENT TIME CONTEXT ===\n${contextPayload.currentTime}\n`;
+    }
+    if (contextPayload.personalInstructions) {
+      contextSection += `\n=== PERSONAL AI INSTRUCTIONS ===\n${contextPayload.personalInstructions}\n`;
+    }
+    if (contextPayload.userPreferences) {
+      contextSection += `\n=== USER PLANNING PREFERENCES & ROUTINES ===\n${JSON.stringify(contextPayload.userPreferences, null, 2)}\n`;
+      const routineText = (contextPayload.userPreferences as any).dailySchedule || config.dailySchedule;
+      if (routineText && routineText.trim()) {
+        contextSection += `\n=== USER DAILY ROUTINE & COMMITTED TIMES (FROM SETTINGS) ===\n${routineText}\n`;
+      }
+    } else if (config.dailySchedule && /(bed\s*time|sleep|wake|routine|schedule|habit)/i.test(userPrompt)) {
+      contextSection += `\n=== USER DAILY ROUTINE & COMMITTED TIMES (FROM SETTINGS) ===\n${config.dailySchedule}\n`;
+    }
+    if (contextPayload.scratchpad) {
+      contextSection += `\n=== TRANSIENT SCRATCHPAD (MULTI-STEP SESSION MEMORY) ===\n${contextPayload.scratchpad}\n`;
+    }
+    if (contextPayload.longTermMemories && contextPayload.longTermMemories.length > 0) {
+      contextSection += `\n=== USER MEMORIES (LONG-TERM PREFERENCES & CONSTRAINTS) ===\n${contextPayload.longTermMemories.map((m) => `- ${m.content}`).join('\n')}\n`;
+    }
+    if (contextPayload.mediumTermMemories && contextPayload.mediumTermMemories.length > 0) {
+      contextSection += `\n=== USER MEMORIES (MEDIUM-TERM WEEKLY FOCUS & DEADLINES) ===\n${contextPayload.mediumTermMemories.map((m) => `- ${m.content}${m.validUntil ? ` (Valid until: ${m.validUntil})` : ''}`).join('\n')}\n`;
+    }
+    if (contextPayload.shortTermMemories && contextPayload.shortTermMemories.length > 0) {
+      contextSection += `\n=== USER MEMORIES (SHORT-TERM RECENT CONTEXT & INSIGHTS) ===\n${contextPayload.shortTermMemories.map((m) => `- ${m.content}`).join('\n')}\n`;
+    }
+    if (contextPayload.relevantMemories && contextPayload.relevantMemories.length > 0) {
+      contextSection += `\n=== SEMANTICALLY RELEVANT USER MEMORIES ===\n${contextPayload.relevantMemories.map((m) => `- ${m.content}`).join('\n')}\n`;
+    }
+    if (contextPayload.goals && contextPayload.goals.length > 0) {
+      contextSection += `\n=== USER ACTIVE GOALS ===\n${contextPayload.goals.map((g) => `- Goal "${g.title}" (Priority: ${g.priority}, Target Date: ${g.targetDate || 'None'}, Progress: ${g.progress}%). Description: ${g.description || ''}`).join('\n')}\n`;
+    }
+    if (contextPayload.tasks && contextPayload.tasks.length > 0) {
+      contextSection += `\n=== USER ACTIVE TASKS ===\n${contextPayload.tasks.map((t) => `- Task ID: ${t._id} | Title: "${t.title}" | Priority: ${t.priority} | Scheduled: ${t.scheduledStart || 'Unscheduled'} | Due: ${t.dueAt || 'None'}`).join('\n')}\n`;
+    }
+    if (contextPayload.agenda && contextPayload.agenda.length > 0) {
+      contextSection += `\n=== TODAY AGENDA ===\n${contextPayload.agenda.map((a) => `- ${a.title} (${a.scheduledStart || 'un-timed'})`).join('\n')}\n`;
+    }
+
     // Compose system prompt dynamically using ONLY Laya-selected prompt modules and dynamic chunking
     const modulesToUse: PromptModuleKey[] = selectedPromptModules && selectedPromptModules.length > 0
       ? selectedPromptModules
       : ['base', 'taskQuery', 'agentReasoning'];
 
-    const systemPromptText = await composeSystemPromptAsync(modulesToUse, {
+    let systemPromptText = await composeSystemPromptAsync(modulesToUse, {
       systemPrompt: config.systemPrompt,
       dailySchedule: config.dailySchedule,
       timeContext,
       userQuery: userPrompt,
     });
 
-    const isSimpleGreeting = (selectedTools !== undefined && selectedTools.length === 0) || /^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you)[\s!?.]*$/i.test(userPrompt.trim());
+    if (contextSection) {
+      systemPromptText += `\n\n${contextSection}`;
+    }
+
+    const includeChatHistory = Boolean(selectedContext && selectedContext.includes('CHAT_HISTORY'));
+    if (includeChatHistory) {
+      systemPromptText += `\n\n[NOTE: Previous conversation messages are provided for reference. The current user prompt and current system context take full precedence over past assistant outputs.]`;
+    }
+
+    console.log(`[LangGraphAgentEngine] 📊 Pipeline Diagnostic State:
+  - Selected Modules: [${modulesToUse.join(', ')}]
+  - Selected Context: [${(selectedContext || []).join(', ')}]
+  - Selected Tools: [${(selectedTools || []).join(', ')}]
+  - CHAT_HISTORY Included: ${includeChatHistory}
+  - System Prompt Length: ${systemPromptText.length} chars (~${Math.ceil(systemPromptText.length / 4)} tokens)`);
+
+    const isSimpleGreeting = /^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you)[\s!?.]*$/i.test(userPrompt.trim());
 
     let finalResponseText = '';
     const executedToolLogs: any[] = [];
@@ -259,7 +312,7 @@ export class LangGraphAgentEngine {
             },
           });
 
-          // For simple greetings or 0 tools, bypass heavy tool schema binding to save ~2,500 prompt tokens
+          // Always bind tools to the model unless it's a pure greeting, ensuring full tool access in all chat modes
           const activeModel = (isSimpleGreeting || tools.length === 0) ? llm : llm.bindTools(tools);
 
           // Custom router preventing infinite duplicate tool loops
@@ -307,11 +360,10 @@ export class LangGraphAgentEngine {
 
           const app = workflow.compile();
 
-          // Previous chat history (w1) - Low weightage (max 1 prior user prompt as context snippet)
-          const recentUserHistory = chatHistory.filter((m) => m.role === 'user').slice(-1);
-          const historyMessages: BaseMessage[] = recentUserHistory.map(
-            (m) => new HumanMessage(`[Background Prior Context (Low Weightage w1)]: ${m.content}`)
-          );
+          // Previous chat history: ONLY include if explicitly selected by Laya Router
+          const historyMessages: BaseMessage[] = includeChatHistory
+            ? chatHistory.slice(-4).map((m) => (m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)))
+            : [];
 
           const initialMessages: BaseMessage[] = [
             new SystemMessage(systemPromptText),
@@ -352,7 +404,19 @@ export class LangGraphAgentEngine {
             }
           }
 
-          finalResponseText = responseTextCandidate || 'Request unsucessful';
+          finalResponseText = responseTextCandidate || 'Request unsuccessful';
+
+          // Process and validate any structured AI actions (schedule_task, create_task, etc.)
+          if (finalResponseText && finalResponseText.includes('{')) {
+            const valResult = await actionValidator.processAndExecute(finalResponseText, {
+              taskService,
+              goalService,
+            });
+            finalResponseText = valResult.responseText;
+            for (const act of valResult.executedActions) {
+              executedToolLogs.push({ tool: act.tool, args: act.args, status: 'success' });
+            }
+          }
 
           // Aggregate token usage cleanly (take max input_tokens per turn to avoid double counting cumulative metrics)
           let promptTokens = 0;

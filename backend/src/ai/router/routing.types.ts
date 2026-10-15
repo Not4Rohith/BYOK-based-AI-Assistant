@@ -14,6 +14,8 @@ export type PromptModuleKey =
   | 'scheduling'
   | 'prioritization'
   | 'memory'
+  | 'goalPlanning'
+  | 'taskDecomposition'
   | 'autonomousAgent'
   | 'agentReasoning';
 
@@ -23,10 +25,13 @@ export type ContextCategory =
   | 'TODAY_AGENDA'
   | 'CALENDAR'
   | 'USER_PREFERENCES'
+  | 'PERSONAL_INSTRUCTIONS'
   | 'GOALS'
   | 'MEMORY'
+  | 'RELEVANT_MEMORIES'
   | 'CHAT_HISTORY'
-  | 'CURRENT_TIME';
+  | 'CURRENT_TIME'
+  | 'TRANSIENT_SCRATCHPAD';
 
 export interface LayaRoutingResult {
   route: RouteType;
@@ -48,8 +53,12 @@ export interface LayaRouterOptions {
   dailySchedule?: string;
   localTime?: string;
   openrouterApiKey?: string;
-  defaultModel?: string;
+  geminiApiKey?: string;
+  grokApiKey?: string;
+  activeProvider?: 'openrouter' | 'gemini' | 'grok';
   sessionId?: string;
+  layaEndpoint?: string;
+  endpoint?: string;
 }
 
 export interface LayaTelemetryMetrics {

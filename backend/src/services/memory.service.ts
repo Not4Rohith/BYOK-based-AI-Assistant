@@ -4,89 +4,23 @@ import { MemoryModel } from '../db/models/Memory.model.js';
 import { embeddingService } from '../ai/embeddings.service.js';
 
 export class MemoryService {
-  private inMemoryMemories: Memory[] = [
-    {
-      _id: 'mem_1',
-      userId: 'usr_1',
-      memoryTier: 'long_term',
-      category: 'preferences',
-      content: 'Prefers studying difficult technical subjects in the morning.',
-      importance: 0.8,
-      confidence: 0.95,
-      source: 'explicit_user',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      _id: 'mem_2',
-      userId: 'usr_1',
-      memoryTier: 'long_term',
-      category: 'constraints',
-      content: 'Do not schedule demanding study sessions after 10:00 PM.',
-      importance: 0.9,
-      confidence: 0.98,
-      source: 'explicit_user',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      _id: 'mem_3',
-      userId: 'usr_1',
-      memoryTier: 'long_term',
-      category: 'routines',
-      content: 'Attends Coders High meeting daily. Always reserve time for it.',
-      tags: ['meeting', 'coders_high', 'recurring'],
-      importance: 0.95,
-      confidence: 0.98,
-      source: 'conversation',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      _id: 'mem_4',
-      userId: 'usr_1',
-      memoryTier: 'long_term',
-      category: 'relationships',
-      content: 'Sensitive emotional support: If user is feeling down or mentions a breakup, suggest supportive movie recommendations and lighten schedule.',
-      tags: ['relationship', 'support', 'movies'],
-      importance: 0.9,
-      confidence: 0.95,
-      source: 'conversation',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      _id: 'mem_5',
-      userId: 'usr_1',
-      memoryTier: 'medium_term',
-      category: 'exams',
-      content: 'NPTEL Exam on Sunday. High priority: Remind user to prepare for NPTEL throughout this week!',
-      validUntil: '2026-09-20',
-      tags: ['nptel', 'exam', 'weekly_focus'],
-      importance: 0.95,
-      confidence: 0.95,
-      source: 'conversation',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  ];
+  private inMemoryMemories: Memory[] = [];
+  private hasCleanedLegacySeeds = false;
 
   public async getMemories(): Promise<Memory[]> {
     if (dbConnection.getStatus().connected) {
-      // Ensure all default core memories (Long-term preferences, Coders High meeting, Medium-term NPTEL exam) exist in DB
-      for (const defaultMem of this.inMemoryMemories) {
-        const found = await MemoryModel.findOne({ content: defaultMem.content });
-        if (!found) {
-          await MemoryModel.create({
-            ...defaultMem,
-            _id: undefined, // Let Mongo generate _id
-          }).catch(() => {});
-        }
+      // Purge legacy hardcoded seed memories if present in DB
+      if (!this.hasCleanedLegacySeeds) {
+        this.hasCleanedLegacySeeds = true;
+        await MemoryModel.deleteMany({
+          $or: [
+            { content: /NPTEL/i },
+            { content: /Coders High/i },
+            { content: /Prefers studying difficult technical subjects/i },
+            { content: /Do not schedule demanding study sessions after 10:00 PM/i },
+            { content: /Sensitive emotional support: If user is feeling down/i },
+          ],
+        }).catch((err) => console.warn('[MemoryService] Cleanup legacy seeds notice:', err));
       }
 
       const docs = await MemoryModel.find({}).sort({ createdAt: -1 });
@@ -95,19 +29,26 @@ export class MemoryService {
     return this.inMemoryMemories;
   }
 
-  public async getActiveMemories(currentDateStr?: string): Promise<{ mediumTerm: Memory[]; longTerm: Memory[] }> {
+  public async getActiveMemories(currentDateStr?: string): Promise<{ shortTerm: Memory[]; mediumTerm: Memory[]; longTerm: Memory[] }> {
     const today = currentDateStr || new Date().toISOString().substring(0, 10);
     const all = await this.getMemories();
 
-    const longTerm: Memory[] = [];
+    const shortTerm: Memory[] = [];
     const mediumTerm: Memory[] = [];
+    const longTerm: Memory[] = [];
 
     for (const mem of all) {
       if (mem.status === 'disabled' || mem.status === 'archived' || mem.status === 'expired') {
         continue;
       }
 
-      if (mem.memoryTier === 'medium_term') {
+      if (mem.memoryTier === 'short_term') {
+        if (mem.validUntil && mem.validUntil < today) {
+          await this.updateMemoryStatus(mem._id, 'expired');
+          continue;
+        }
+        shortTerm.push(mem);
+      } else if (mem.memoryTier === 'medium_term') {
         if (mem.validUntil && mem.validUntil < today) {
           // Auto-expire past medium-term context so it stops impacting long-term planning
           await this.updateMemoryStatus(mem._id, 'expired');
@@ -119,7 +60,7 @@ export class MemoryService {
       }
     }
 
-    return { mediumTerm, longTerm };
+    return { shortTerm, mediumTerm, longTerm };
   }
 
   public async updateMemoryStatus(id: string, newStatus: string): Promise<boolean> {

@@ -34,7 +34,14 @@ export const GoogleSidebar: React.FC<GoogleSidebarProps> = ({
   const [newListTitle, setNewListTitle] = useState('');
 
   const getListTaskCount = (listId: string) => {
-    return tasks.filter((t) => t.listId === listId && t.status !== 'completed').length;
+    return tasks.filter((t) => {
+      if (t.status === 'completed') return false;
+      if (t.listId === listId) return true;
+      if ((!t.listId || !taskLists.some((tl) => tl._id === t.listId)) && listId === taskLists[0]?._id) {
+        return true;
+      }
+      return false;
+    }).length;
   };
 
   const handleCreateListSubmit = (e: React.FormEvent) => {

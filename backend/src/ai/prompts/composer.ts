@@ -27,24 +27,21 @@ export async function composeSystemPromptAsync(
 ): Promise<string> {
   const parts: string[] = [];
 
+  // Always include the core foundation (identity, time context, tool execution guidelines)
+  parts.push(getBasePromptModule(options.timeContext));
+
+  // Break custom system prompt into smallest atomic parts and inject relevant parts
   if (options.systemPrompt && options.systemPrompt.trim().length > 0) {
-    const customPromptChunk = await dynamicPromptChunker.selectRelevantPromptChunks(
+    const chunkedInstructions = await dynamicPromptChunker.selectRelevantPromptChunks(
       options.systemPrompt,
       options.userQuery
     );
-    parts.push(customPromptChunk || getBasePromptModule(options.timeContext));
-  } else {
-    parts.push(getBasePromptModule(options.timeContext));
+    if (chunkedInstructions.trim().length > 0) {
+      parts.push(`=== USER CUSTOM SYSTEM INSTRUCTIONS & CONSTRAINTS ===\n${chunkedInstructions}`);
+    }
   }
 
-  let scheduleChunk = options.dailySchedule;
-  if (options.dailySchedule && options.dailySchedule.trim().length > 0) {
-    scheduleChunk = await dynamicPromptChunker.selectRelevantScheduleChunks(
-      options.dailySchedule,
-      options.timeContext,
-      options.userQuery
-    );
-  }
+  const scheduleChunk = options.dailySchedule || '';
 
   const uniqueModules = Array.from(new Set(modules));
 
@@ -72,13 +69,23 @@ export async function composeSystemPromptAsync(
         parts.push(getListsModule());
         break;
       case 'scheduling':
-        parts.push(getSchedulingModule());
+        parts.push(getSchedulingModule(scheduleChunk));
         break;
       case 'prioritization':
         parts.push(getPrioritizationModule());
         break;
       case 'memory':
         parts.push(getMemoryModule());
+        break;
+      case 'goalPlanning':
+        parts.push(`=== GOAL PLANNING & ALIGNMENT ===
+- Evaluate the user's active goals, target dates, and priority levels from context.
+- Align scheduled work with goal milestones, prioritizing imminent target dates.`);
+        break;
+      case 'taskDecomposition':
+        parts.push(`=== TASK DECOMPOSITION ===
+- Break higher-level goals and project milestones down into clear, single-action work blocks.
+- Create concrete tasks on the user's task board with specific scheduled start and end times.`);
         break;
       case 'autonomousAgent':
         parts.push(getAutonomousAgentModule());
@@ -126,13 +133,23 @@ export function composeSystemPrompt(
         parts.push(getListsModule());
         break;
       case 'scheduling':
-        parts.push(getSchedulingModule());
+        parts.push(getSchedulingModule(options.dailySchedule));
         break;
       case 'prioritization':
         parts.push(getPrioritizationModule());
         break;
       case 'memory':
         parts.push(getMemoryModule());
+        break;
+      case 'goalPlanning':
+        parts.push(`=== GOAL PLANNING & ALIGNMENT ===
+- Evaluate the user's active goals, target dates, and priority levels from context.
+- Align scheduled work with goal milestones, prioritizing imminent target dates.`);
+        break;
+      case 'taskDecomposition':
+        parts.push(`=== TASK DECOMPOSITION ===
+- Break higher-level goals and project milestones down into clear, single-action work blocks.
+- Create concrete tasks on the user's task board with specific scheduled start and end times.`);
         break;
       case 'autonomousAgent':
         parts.push(getAutonomousAgentModule());

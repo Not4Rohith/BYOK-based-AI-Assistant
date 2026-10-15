@@ -1,12 +1,14 @@
 import { Task, GoogleTaskSyncMetadata } from '@ai-task-manager/shared-types';
 import { dbConnection } from '../db/connection.js';
 import { TaskModel } from '../db/models/Task.model.js';
+import { TaskListModel } from '../db/models/TaskList.model.js';
 import { googleTasksService } from './googleTasks.service.js';
 
 export const DEFAULT_INITIAL_TASKS: Task[] = [];
 
 export class TaskService {
   private inMemoryTasks: Task[] = [];
+  private hasCleanedDefaultRecurrence = false;
 
   public async getAllTasks(): Promise<Task[]> {
     const now = new Date();
@@ -20,6 +22,45 @@ export class TaskService {
           { title: { $regex: /delete.*available.*tasks/i } },
         ],
       });
+
+      // 2. Auto-heal any tasks in database where listId is null or missing
+      try {
+        const availableLists = await TaskListModel.find({});
+        const defaultListId = availableLists[0]?._id?.toString() || 'list_default';
+
+        const unassignedDocs = await TaskModel.find({
+          $or: [{ listId: null }, { listId: { $exists: false } }, { listId: '' }],
+        });
+
+        if (unassignedDocs.length > 0) {
+          for (const doc of unassignedDocs) {
+            const combined = `${doc.title || ''} ${doc.description || ''}`.toLowerCase();
+            let matchedId = defaultListId;
+            if (/academic|class|nptel|lecture|study|exam|homework|college/i.test(combined)) {
+              const matched = availableLists.find((l) => /academic|class|study/i.test(l.title));
+              if (matched) matchedId = matched._id.toString();
+            } else if (/code|coding|dev|programming|github|bug|repo/i.test(combined)) {
+              const matched = availableLists.find((l) => /code|coding|dev/i.test(l.title));
+              if (matched) matchedId = matched._id.toString();
+            } else if (/routine|personal|relax|break|rest|leisure|sleep|gym|workout/i.test(combined)) {
+              const matched = availableLists.find((l) => /routine|personal|daily/i.test(l.title));
+              if (matched) matchedId = matched._id.toString();
+            }
+            doc.listId = matchedId;
+            await doc.save();
+          }
+        }
+      } catch (err) {
+        console.warn('[TaskService] Auto-healing listId notice:', err);
+      }
+
+      if (!this.hasCleanedDefaultRecurrence) {
+        this.hasCleanedDefaultRecurrence = true;
+        await TaskModel.updateMany(
+          { 'recurrence.enabled': { $ne: true } },
+          { $set: { 'recurrence.enabled': false, 'recurrence.rule': null } }
+        ).catch(() => {});
+      }
 
       const existingDocs = await TaskModel.find({
         $or: [
@@ -73,11 +114,37 @@ export class TaskService {
       syncStatus: 'synced',
     };
 
-    const recurrenceConfig = data.recurrence || {
-      enabled: !!(data.tags?.includes('recurring') || (data as any).category?.startsWith('FREQ=')),
-      rule: (data as any).category?.startsWith('FREQ=') ? (data as any).category : 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
-      timezone: 'Asia/Kolkata',
-    };
+    const recurrenceConfig = data.recurrence?.enabled && data.recurrence?.rule
+      ? {
+          enabled: true,
+          rule: data.recurrence.rule,
+          timezone: data.recurrence.timezone || 'Asia/Kolkata',
+        }
+      : {
+          enabled: false,
+          rule: null,
+          timezone: 'Asia/Kolkata',
+        };
+
+    let targetListId = data.listId;
+    if (!targetListId && dbConnection.getStatus().connected) {
+      try {
+        const availableLists = await TaskListModel.find({});
+        const defaultListId = availableLists[0]?._id?.toString() || 'list_default';
+        targetListId = defaultListId;
+        const text = `${data.title || ''} ${data.description || ''}`.toLowerCase();
+        if (/academic|class|nptel|lecture|study|exam|homework|college/i.test(text)) {
+          const matched = availableLists.find((l) => /academic|class|study/i.test(l.title));
+          if (matched) targetListId = matched._id.toString();
+        } else if (/code|coding|dev|programming|github|bug|repo/i.test(text)) {
+          const matched = availableLists.find((l) => /code|coding|dev/i.test(l.title));
+          if (matched) targetListId = matched._id.toString();
+        } else if (/routine|personal|relax|break|rest|leisure|sleep|gym|workout/i.test(text)) {
+          const matched = availableLists.find((l) => /routine|personal|daily/i.test(l.title));
+          if (matched) targetListId = matched._id.toString();
+        }
+      } catch {}
+    }
 
     if (dbConnection.getStatus().connected) {
       const doc = await TaskModel.create({
@@ -87,7 +154,7 @@ export class TaskService {
         status: data.status || 'pending',
         priority: data.priority || 'medium',
         starred: !!data.starred,
-        listId: data.listId || null,
+        listId: targetListId || null,
         estimatedMinutes: data.estimatedMinutes || 30,
         scheduledStart: data.scheduledStart || new Date().toISOString(),
         scheduledEnd:
@@ -132,6 +199,16 @@ export class TaskService {
   }
 
   public async updateTask(id: string, updates: Partial<Task>): Promise<Task | null> {
+    if (updates.recurrence !== undefined) {
+      if (!updates.recurrence || !updates.recurrence.enabled || !updates.recurrence.rule) {
+        updates.recurrence = {
+          enabled: false,
+          rule: null as any,
+          timezone: updates.recurrence?.timezone || 'Asia/Kolkata',
+        };
+      }
+    }
+
     if (dbConnection.getStatus().connected) {
       const doc = await TaskModel.findByIdAndUpdate(id, updates, { new: true });
       return doc ? this.mapDocToTask(doc) : null;
@@ -247,7 +324,7 @@ export class TaskService {
       status: doc.status,
       priority: doc.priority,
       starred: doc.starred,
-      listId: doc.listId,
+      listId: doc.listId || undefined,
       parentTaskId: doc.parentTaskId,
       goalId: doc.goalId,
       estimatedMinutes: doc.estimatedMinutes,

@@ -50,23 +50,21 @@ export const GoogleHeader: React.FC<GoogleHeaderProps> = ({
               ? 'Render Backend: Connected (Click to re-check connection status)'
               : 'Render Backend: Offline (Click to retry connection)'
           }
-          className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center space-x-2 border transition-all cursor-pointer shadow-sm ${
-            isConnected
+          className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center space-x-2 border transition-all cursor-pointer shadow-sm ${isConnected
               ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
               : 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border-rose-500/30'
-          }`}
+            }`}
         >
           <span
-            className={`w-2.5 h-2.5 rounded-full ${
-              isCheckingHealth
+            className={`w-2.5 h-2.5 rounded-full ${isCheckingHealth
                 ? 'bg-amber-400 animate-ping'
                 : isConnected
-                ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse'
-                : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)]'
-            }`}
+                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse'
+                  : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)]'
+              }`}
           />
           <span className="font-semibold tracking-wide flex items-center space-x-1">
-            <span>{isCheckingHealth ? 'Checking...' : isConnected ? 'Render Connected' : 'Render Offline'}</span>
+            <span>{isCheckingHealth ? 'Checking...' : isConnected ? 'Connected' : 'Render Offline'}</span>
             {isCheckingHealth && <RefreshCw className="w-3 h-3 animate-spin ml-1 inline text-amber-400" />}
           </span>
         </button>

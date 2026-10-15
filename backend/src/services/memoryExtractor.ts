@@ -26,81 +26,52 @@ export class MemoryExtractor {
       return null;
     }
 
-    // Ignore potential credential strings
+    // Ignore credentials
     if (lower.includes('api_key') || lower.includes('password') || lower.includes('secret') || lower.includes('token')) {
       return null;
     }
 
-    // 1. Detect Medium-Term Time-Bounded Events / Exams (e.g., NPTEL exam on Sunday, midterms this week)
-    if (lower.includes('exam') || lower.includes('nptel') || lower.includes('midterm') || lower.includes('due this week')) {
-      // Calculate next Sunday or 7 days from now as default validUntil date
-      const d = new Date();
-      const day = d.getDay();
-      const daysUntilSunday = day === 0 ? 7 : 7 - day;
-      const validUntilDate = new Date(d.getTime() + daysUntilSunday * 86400000).toISOString().substring(0, 10);
-
-      return {
-        content: prompt,
-        memoryTier: 'medium_term',
-        category: 'exams',
-        validUntil: validUntilDate,
-        tags: ['exam', 'time_bounded', 'weekly_focus'],
-        importance: 0.95,
-        confidence: 0.95,
-        source: 'conversation',
-      };
+    // Ignore explicit goal/task scheduling prompts (e.g. "I have a test in 5 days", "create a task")
+    if (/\b(test|interview|exam|deadline)\s+in\s+\d+/i.test(lower) || lower.startsWith('create task') || lower.startsWith('plan my')) {
+      return null;
     }
 
-    // 2. Detect Sensitive Personal Relationships & Emotional Guidance (Long-Term)
-    if (lower.includes('breakup') || lower.includes('relationship') || lower.includes('feeling down') || lower.includes('movie') || lower.includes('girlfriend') || lower.includes('partner')) {
-      return {
-        content: prompt,
-        memoryTier: 'long_term',
-        category: 'relationships',
-        tags: ['relationship', 'emotional_support', 'movies'],
-        metadata: { suggestMoviesOnSadness: true },
-        importance: 0.95,
-        confidence: 0.95,
-        source: 'conversation',
-      };
-    }
-
-    // 3. Detect Recurring Commitments & Meetings (Long-Term, Routines)
-    if (lower.includes('coders high') || lower.includes('meeting') || (lower.includes('every day') && lower.includes('join'))) {
-      return {
-        content: prompt,
-        memoryTier: 'long_term',
-        category: 'routines',
-        tags: ['meeting', 'daily_routine', 'coders_high'],
-        metadata: { reserveDailyTime: true },
-        importance: 0.95,
-        confidence: 0.95,
-        source: 'conversation',
-      };
-    }
-
-    // 4. Detect Constraints (Long-Term)
-    if (lower.includes("don't") || lower.includes('never') || lower.includes('no study') || lower.includes('cannot')) {
+    // 1. Detect Constraints (Long-Term User Rules & Constraints)
+    if (lower.includes("don't") || lower.includes('never') || lower.includes('no study') || lower.includes('cannot') || lower.includes('do not schedule')) {
       return {
         content: prompt,
         memoryTier: 'long_term',
         category: 'constraints',
-        tags: ['constraint'],
+        tags: ['constraint', 'scheduling'],
         importance: 0.9,
         confidence: 0.95,
         source: 'conversation',
       };
     }
 
-    // 5. Detect Preferences (Long-Term)
-    if (lower.includes('prefer') || lower.includes('like') || lower.includes('favorite') || lower.includes('enjoy')) {
+    // 2. Detect Personal Preferences & Habits (Long-Term)
+    if (lower.includes('prefer') || lower.includes('like to') || lower.includes('favorite') || lower.includes('enjoy')) {
       return {
         content: prompt,
         memoryTier: 'long_term',
         category: 'preferences',
-        tags: ['preference'],
-        importance: 0.8,
-        confidence: 0.9,
+        tags: ['preference', 'user_habit'],
+        importance: 0.85,
+        confidence: 0.95,
+        source: 'conversation',
+      };
+    }
+
+    // 3. Detect Sensitive Personal Relationships
+    if (lower.includes('breakup') || lower.includes('relationship') || lower.includes('feeling down') || lower.includes('girlfriend') || lower.includes('partner')) {
+      return {
+        content: prompt,
+        memoryTier: 'long_term',
+        category: 'relationships',
+        tags: ['relationship', 'emotional_support'],
+        metadata: { suggestMoviesOnSadness: true },
+        importance: 0.95,
+        confidence: 0.95,
         source: 'conversation',
       };
     }

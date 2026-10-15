@@ -36,20 +36,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     aiConfig.mongoUri || ''
   );
 
+  // Provider enabled toggles
+  const [openRouterEnabled, setOpenRouterEnabled] = useState<boolean>(
+    aiConfig.openrouter?.enabled ?? true
+  );
+  const [geminiEnabled, setGeminiEnabled] = useState<boolean>(
+    aiConfig.gemini?.enabled ?? true
+  );
+  const [grokEnabled, setGrokEnabled] = useState<boolean>(
+    aiConfig.grok?.enabled ?? false
+  );
+
   // Provider keys
-  const [openRouterKey, setOpenRouterKey] = useState(aiConfig.openrouter.apiKey || '');
-  const [geminiKey, setGeminiKey] = useState(aiConfig.gemini.apiKey || '');
-  const [grokKey, setGrokKey] = useState(aiConfig.grok.apiKey || '');
+  const [openRouterKey, setOpenRouterKey] = useState(aiConfig.openrouter?.apiKey || '');
+  const [geminiKey, setGeminiKey] = useState(aiConfig.gemini?.apiKey || '');
+  const [grokKey, setGrokKey] = useState(aiConfig.grok?.apiKey || '');
 
   // Primary models
-  const [openRouterDefault, setOpenRouterDefault] = useState(aiConfig.openrouter.defaultModel || '');
-  const [geminiDefault, setGeminiDefault] = useState(aiConfig.gemini.defaultModel || '');
-  const [grokDefault, setGrokDefault] = useState(aiConfig.grok.defaultModel || '');
+  const [openRouterDefault, setOpenRouterDefault] = useState(aiConfig.openrouter?.defaultModel || '');
+  const [geminiDefault, setGeminiDefault] = useState(aiConfig.gemini?.defaultModel || '');
+  const [grokDefault, setGrokDefault] = useState(aiConfig.grok?.defaultModel || '');
 
   // Ranked fallback models lists
-  const [openRouterFallbacks, setOpenRouterFallbacks] = useState<string[]>(aiConfig.openrouter.fallbackModels || []);
-  const [geminiFallbacks, setGeminiFallbacks] = useState<string[]>(aiConfig.gemini.fallbackModels || []);
-  const [grokFallbacks, setGrokFallbacks] = useState<string[]>(aiConfig.grok.fallbackModels || []);
+  const [openRouterFallbacks, setOpenRouterFallbacks] = useState<string[]>(aiConfig.openrouter?.fallbackModels || []);
+  const [geminiFallbacks, setGeminiFallbacks] = useState<string[]>(aiConfig.gemini?.fallbackModels || []);
+  const [grokFallbacks, setGrokFallbacks] = useState<string[]>(aiConfig.grok?.fallbackModels || []);
+
 
   // Combined models list (presets + API fetched models)
   const [availableModels, setAvailableModels] = useState<{
@@ -89,15 +101,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           });
           return { ...prev, [provider]: Array.from(mergedMap.values()) };
         });
-
-        // Auto-assign default model if currently empty
-        if (provider === 'openrouter') {
-          setOpenRouterDefault((prev) => prev || data[0].id);
-        } else if (provider === 'gemini') {
-          setGeminiDefault((prev) => prev || data[0].id);
-        } else if (provider === 'grok') {
-          setGrokDefault((prev) => prev || data[0].id);
-        }
       }
     } catch (err) {
       console.warn(`Failed to fetch models for ${provider}:`, err);
@@ -110,6 +113,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (aiConfig) {
       setDailySchedule(aiConfig.dailySchedule || '');
       setMongoUri(aiConfig.mongoUri || '');
+      setOpenRouterEnabled(aiConfig.openrouter?.enabled ?? true);
+      setGeminiEnabled(aiConfig.gemini?.enabled ?? true);
+      setGrokEnabled(aiConfig.grok?.enabled ?? false);
+
       setOpenRouterKey(aiConfig.openrouter?.apiKey || '');
       setGeminiKey(aiConfig.gemini?.apiKey || '');
       setGrokKey(aiConfig.grok?.apiKey || '');
@@ -121,6 +128,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setOpenRouterFallbacks(aiConfig.openrouter?.fallbackModels || []);
       setGeminiFallbacks(aiConfig.gemini?.fallbackModels || []);
       setGrokFallbacks(aiConfig.grok?.fallbackModels || []);
+
     }
   }, [aiConfig]);
 
@@ -156,18 +164,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       systemPrompt,
       openrouter: {
         ...aiConfig.openrouter,
+        enabled: openRouterEnabled,
         apiKey: openRouterKey,
         defaultModel: openRouterDefault,
         fallbackModels: openRouterFallbacks,
       },
       gemini: {
         ...aiConfig.gemini,
+        enabled: geminiEnabled,
         apiKey: geminiKey,
         defaultModel: geminiDefault,
         fallbackModels: geminiFallbacks,
       },
       grok: {
         ...aiConfig.grok,
+        enabled: grokEnabled,
         apiKey: grokKey,
         defaultModel: grokDefault,
         fallbackModels: grokFallbacks,
@@ -290,7 +301,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <span>Personal AI Instructions (System Prompt)</span>
           </h3>
           <p className="text-xs text-slate-400">
-            High-priority context provided directly by you. Passed to the AI model on every chat message.
+            High-priority context provided directly by you. Used when relevant to your request.
           </p>
           <textarea
             value={systemPrompt}
@@ -315,26 +326,63 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           {/* Provider 1: OpenRouter */}
-          <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl space-y-4">
+          <div className={`p-4 bg-white/[0.02] border rounded-xl space-y-4 ${openRouterEnabled ? 'border-white/10' : 'border-white/5 opacity-60'}`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-3">
                 <Cpu className="w-4 h-4 text-blue-400" />
                 <span className="text-xs font-bold text-white uppercase tracking-wider">OpenRouter Provider</span>
+                <button
+                  type="button"
+                  onClick={() => setOpenRouterEnabled(!openRouterEnabled)}
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded border transition-colors ${
+                    openRouterEnabled
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                  }`}
+                >
+                  {openRouterEnabled ? 'ENABLED' : 'DISABLED'}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => fetchModelsForProvider('openrouter')}
-                disabled={loadingModels.openrouter}
-                className="flex items-center space-x-1 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 text-xs rounded-lg transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3 h-3 ${loadingModels.openrouter ? 'animate-spin' : ''}`} />
-                <span>{loadingModels.openrouter ? 'Fetching models...' : 'Fetch Models via API'}</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                {(openRouterKey || openRouterDefault) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenRouterDefault('');
+                      setOpenRouterFallbacks([]);
+                    }}
+                    className="text-[11px] text-rose-400 hover:text-rose-300 px-2 py-1 bg-rose-500/10 rounded-lg border border-rose-500/20"
+                    title="Deselect all selected OpenRouter models"
+                  >
+                    Deselect Models
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fetchModelsForProvider('openrouter')}
+                  disabled={loadingModels.openrouter}
+                  className="flex items-center space-x-1 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 text-xs rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${loadingModels.openrouter ? 'animate-spin' : ''}`} />
+                  <span>{loadingModels.openrouter ? 'Fetching models...' : 'Fetch Models via API'}</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs text-slate-300 font-medium">OpenRouter API Key</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-slate-300 font-medium">OpenRouter API Key</label>
+                  {openRouterKey && (
+                    <button
+                      type="button"
+                      onClick={() => setOpenRouterKey('')}
+                      className="text-[10px] text-rose-400 hover:underline"
+                    >
+                      Clear Key
+                    </button>
+                  )}
+                </div>
                 <input
                   type="password"
                   value={openRouterKey}
@@ -348,13 +396,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="space-y-1.5">
                 <label className="text-xs text-slate-300 font-medium flex items-center justify-between">
                   <span>Primary Model (Default)</span>
-                  <span className="text-[10px] text-emerald-400 font-mono">{availableModels.openrouter.length} models available</span>
+                  <div className="flex items-center space-x-2">
+                    {openRouterDefault && (
+                      <button
+                        type="button"
+                        onClick={() => setOpenRouterDefault('')}
+                        className="text-[10px] text-rose-400 hover:underline"
+                      >
+                        Deselect
+                      </button>
+                    )}
+                    <span className="text-[10px] text-emerald-400 font-mono">{availableModels.openrouter.length} models available</span>
+                  </div>
                 </label>
                 <select
                   value={openRouterDefault}
                   onChange={(e) => setOpenRouterDefault(e.target.value)}
                   className="w-full max-w-full truncate bg-[#242424] border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-indigo-500/50 font-mono cursor-pointer overflow-hidden"
                 >
+                  <option value="">-- None / Unconfigured --</option>
                   {openRouterDefault && !availableModels.openrouter.some((m) => m.id === openRouterDefault) && (
                     <option value={openRouterDefault}>{openRouterDefault} (Custom)</option>
                   )}
@@ -451,26 +511,63 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           {/* Provider 2: Gemini */}
-          <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl space-y-4">
+          <div className={`p-4 bg-white/[0.02] border rounded-xl space-y-4 ${geminiEnabled ? 'border-white/10' : 'border-white/5 opacity-60'}`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-3">
                 <Cpu className="w-4 h-4 text-emerald-400" />
                 <span className="text-xs font-bold text-white uppercase tracking-wider">Google Gemini Provider</span>
+                <button
+                  type="button"
+                  onClick={() => setGeminiEnabled(!geminiEnabled)}
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded border transition-colors ${
+                    geminiEnabled
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                  }`}
+                >
+                  {geminiEnabled ? 'ENABLED' : 'DISABLED'}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => fetchModelsForProvider('gemini')}
-                disabled={loadingModels.gemini}
-                className="flex items-center space-x-1 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-xs rounded-lg transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3 h-3 ${loadingModels.gemini ? 'animate-spin' : ''}`} />
-                <span>{loadingModels.gemini ? 'Fetching models...' : 'Fetch Models via Key'}</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                {(geminiKey || geminiDefault) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGeminiDefault('');
+                      setGeminiFallbacks([]);
+                    }}
+                    className="text-[11px] text-rose-400 hover:text-rose-300 px-2 py-1 bg-rose-500/10 rounded-lg border border-rose-500/20"
+                    title="Deselect all selected Gemini models"
+                  >
+                    Deselect Models
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fetchModelsForProvider('gemini')}
+                  disabled={loadingModels.gemini}
+                  className="flex items-center space-x-1 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-xs rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${loadingModels.gemini ? 'animate-spin' : ''}`} />
+                  <span>{loadingModels.gemini ? 'Fetching models...' : 'Fetch Models via Key'}</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs text-slate-300 font-medium">Gemini API Key</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-slate-300 font-medium">Gemini API Key</label>
+                  {geminiKey && (
+                    <button
+                      type="button"
+                      onClick={() => setGeminiKey('')}
+                      className="text-[10px] text-rose-400 hover:underline"
+                    >
+                      Clear Key
+                    </button>
+                  )}
+                </div>
                 <input
                   type="password"
                   value={geminiKey}
@@ -483,13 +580,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="space-y-1.5">
                 <label className="text-xs text-slate-300 font-medium flex items-center justify-between">
                   <span>Primary Model (Default)</span>
-                  <span className="text-[10px] text-emerald-400 font-mono">{availableModels.gemini.length} models available</span>
+                  <div className="flex items-center space-x-2">
+                    {geminiDefault && (
+                      <button
+                        type="button"
+                        onClick={() => setGeminiDefault('')}
+                        className="text-[10px] text-rose-400 hover:underline"
+                      >
+                        Deselect
+                      </button>
+                    )}
+                    <span className="text-[10px] text-emerald-400 font-mono">{availableModels.gemini.length} models available</span>
+                  </div>
                 </label>
                 <select
                   value={geminiDefault}
                   onChange={(e) => setGeminiDefault(e.target.value)}
                   className="w-full max-w-full truncate bg-[#242424] border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500/50 font-mono cursor-pointer overflow-hidden"
                 >
+                  <option value="">-- None / Unconfigured --</option>
                   {geminiDefault && !availableModels.gemini.some((m) => m.id === geminiDefault) && (
                     <option value={geminiDefault}>{geminiDefault} (Custom)</option>
                   )}
@@ -582,46 +691,95 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
-          {/* grok  */}
-          <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl space-y-4">
+          {/* Provider 3: Grok */}
+          <div className={`p-4 bg-white/[0.02] border rounded-xl space-y-4 ${grokEnabled ? 'border-white/10' : 'border-white/5 opacity-60'}`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Cpu className="w-4 h-4 text-emerald-400" />
+              <div className="flex items-center space-x-3">
+                <Cpu className="w-4 h-4 text-purple-400" />
                 <span className="text-xs font-bold text-white uppercase tracking-wider">Grok Provider</span>
+                <button
+                  type="button"
+                  onClick={() => setGrokEnabled(!grokEnabled)}
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded border transition-colors ${
+                    grokEnabled
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                  }`}
+                >
+                  {grokEnabled ? 'ENABLED' : 'DISABLED'}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => fetchModelsForProvider('grok')}
-                disabled={loadingModels.grok}
-                className="flex items-center space-x-1 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-xs rounded-lg transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3 h-3 ${loadingModels.grok ? 'animate-spin' : ''}`} />
-                <span>{loadingModels.grok ? 'Fetching models...' : 'Fetch Models via Key'}</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                {(grokKey || grokDefault) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGrokDefault('');
+                      setGrokFallbacks([]);
+                    }}
+                    className="text-[11px] text-rose-400 hover:text-rose-300 px-2 py-1 bg-rose-500/10 rounded-lg border border-rose-500/20"
+                    title="Deselect all selected Grok models"
+                  >
+                    Deselect Models
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fetchModelsForProvider('grok')}
+                  disabled={loadingModels.grok}
+                  className="flex items-center space-x-1 px-3 py-1 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 text-xs rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${loadingModels.grok ? 'animate-spin' : ''}`} />
+                  <span>{loadingModels.grok ? 'Fetching models...' : 'Fetch Models via Key'}</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs text-slate-300 font-medium">Grok API Key</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-slate-300 font-medium">Grok API Key</label>
+                  {grokKey && (
+                    <button
+                      type="button"
+                      onClick={() => setGrokKey('')}
+                      className="text-[10px] text-rose-400 hover:underline"
+                    >
+                      Clear Key
+                    </button>
+                  )}
+                </div>
                 <input
                   type="password"
                   value={grokKey}
                   onChange={(e) => setGrokKey(e.target.value)}
-                  placeholder="AIzaSy..."
-                  className="w-full bg-white/5 border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500/50 font-mono"
+                  placeholder="xai-..."
+                  className="w-full bg-white/5 border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-purple-500/50 font-mono"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs text-slate-300 font-medium flex items-center justify-between">
                   <span>Primary Model (Default)</span>
-                  <span className="text-[10px] text-emerald-400 font-mono">{availableModels.grok.length} models available</span>
+                  <div className="flex items-center space-x-2">
+                    {grokDefault && (
+                      <button
+                        type="button"
+                        onClick={() => setGrokDefault('')}
+                        className="text-[10px] text-rose-400 hover:underline"
+                      >
+                        Deselect
+                      </button>
+                    )}
+                    <span className="text-[10px] text-purple-400 font-mono">{availableModels.grok.length} models available</span>
+                  </div>
                 </label>
                 <select
                   value={grokDefault}
                   onChange={(e) => setGrokDefault(e.target.value)}
-                  className="w-full max-w-full truncate bg-[#242424] border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-emerald-500/50 font-mono cursor-pointer overflow-hidden"
+                  className="w-full max-w-full truncate bg-[#242424] border border-white/10 px-3 py-2 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-purple-500/50 font-mono cursor-pointer overflow-hidden"
                 >
+                  <option value="">-- None / Unconfigured --</option>
                   {grokDefault && !availableModels.grok.some((m) => m.id === grokDefault) && (
                     <option value={grokDefault}>{grokDefault} (Custom)</option>
                   )}
@@ -634,14 +792,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
 
-            {/* Gemini Ranked Fallback Candidates */}
+            {/* Grok Ranked Fallback Candidates */}
             <div className="pt-3 border-t border-white/5 space-y-2">
               <label className="text-xs font-semibold text-slate-300">
                 Ranked Fallback Candidate Models
               </label>
               <div className="w-full max-w-full overflow-hidden">
                 <select
-                  className="w-full max-w-full truncate bg-[#242424] border border-emerald-500/40 hover:border-emerald-400 rounded-lg px-2.5 py-2 text-xs text-emerald-300 font-mono focus:outline-none cursor-pointer overflow-hidden"
+                  className="w-full max-w-full truncate bg-[#242424] border border-purple-500/40 hover:border-purple-400 rounded-lg px-2.5 py-2 text-xs text-purple-300 font-mono focus:outline-none cursor-pointer overflow-hidden"
                   onChange={(e) => {
                     if (e.target.value) {
                       addFallbackModel('grok', e.target.value);
@@ -675,7 +833,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         className="flex items-center justify-between bg-white/5 border border-white/10 px-3 py-2 rounded-lg text-xs"
                       >
                         <div className="flex items-center space-x-2.5 font-mono min-w-0 flex-1 pr-2">
-                          <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 shrink-0">
+                          <span className="text-[10px] text-purple-400 font-bold bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 shrink-0">
                             #{idx + 1} Fallback
                           </span>
                           <span className="text-slate-200 truncate">{displayName}</span>

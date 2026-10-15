@@ -15,9 +15,8 @@
     "bundle:desktop": "npm run build:backend && npm run build:desktop",
     "dev:backend": "npm run dev --workspace=backend",
     "build:backend": "npm run build --workspace=backend",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc -p backend --noEmit && tsc -p apps/desktop --noEmit"
   },
-
   "devDependencies": {
     "concurrently": "^8.2.2"
   }

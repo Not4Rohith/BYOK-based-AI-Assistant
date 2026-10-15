@@ -12,5 +12,19 @@ export default defineConfig({
   },
   server: {
     port: 3000
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Splits core React libraries into their own chunk
+          vendor: ['react', 'react-dom', 'scheduler'],
+          // Splits KaTeX (which was taking up significant space in your build) into its own chunk
+          math: ['katex'],
+          // You can also split icons if you are using lucide-react heavily
+          icons: ['lucide-react']
+        }
+      }
+    }
   }
 });

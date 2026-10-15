@@ -4,7 +4,6 @@ import { Priority } from '@ai-task-manager/shared-types';
 import { TaskService } from '../services/task.service.js';
 import { taskListService } from '../services/taskList.service.js';
 import { aiAgentGoalService } from '../services/aiAgentGoal.service.js';
-import { automaticReplanner } from './automaticReplanner.js';
 import { transientScratchpad } from './scratchpad.js';
 
 export function createLangChainTools(taskService?: TaskService) {
@@ -87,6 +86,9 @@ export function createLangChainTools(taskService?: TaskService) {
         scheduledStart: input.scheduledStart || new Date().toISOString(),
         scheduledEnd: input.scheduledEnd,
         expiresAt: input.expiresAt,
+        recurrence: input.recurringRule
+          ? { enabled: true, rule: input.recurringRule, timezone: 'Asia/Kolkata' }
+          : { enabled: false, rule: null as any, timezone: 'Asia/Kolkata' },
         subtasks: input.subtasks ? input.subtasks.map((stTitle) => ({ _id: `st_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, title: stTitle, completed: false })) : [],
       });
 
@@ -98,7 +100,7 @@ export function createLangChainTools(taskService?: TaskService) {
     },
     {
       name: 'create_task',
-      description: 'Create a new user task on the task board. Optionally pass starred or expiresAt ISO timestamp.',
+      description: 'Create a new user task on the task board. By default tasks MUST NOT repeat/recur unless explicitly requested by the user.',
       schema: z.object({
         title: z.string().describe('Short descriptive title for the task'),
         description: z.string().optional().describe('Detailed task description'),
@@ -110,6 +112,7 @@ export function createLangChainTools(taskService?: TaskService) {
         scheduledStart: z.string().optional(),
         scheduledEnd: z.string().optional(),
         expiresAt: z.string().optional().describe('Optional ISO date string when task automatically expires'),
+        recurringRule: z.string().optional().describe('ONLY provide this if the user EXPLICITLY requested a repeating or recurring task (e.g. "FREQ=DAILY", "FREQ=WEEKLY;BYDAY=MO"). Leave undefined for normal tasks.'),
         subtasks: z.array(z.string()).optional().describe('Subtask title strings'),
       }),
     }
@@ -121,7 +124,12 @@ export function createLangChainTools(taskService?: TaskService) {
       const createdList: any[] = [];
       const allLists = await taskListService.getAllLists();
 
-      for (const item of tasks) {
+      // Smart Auto-Sequencer & Overlap Prevention
+      const now = new Date();
+      let lastEndMs = now.getTime();
+
+      for (let i = 0; i < tasks.length; i++) {
+        const item = tasks[i];
         let listId = item.listId;
         if (!listId || !listId.startsWith('list_')) {
           const targetTitle = item.listTitle || item.listId;
@@ -135,31 +143,65 @@ export function createLangChainTools(taskService?: TaskService) {
           }
         }
 
+        const durationMinutes = item.estimatedMinutes && item.estimatedMinutes > 0 ? item.estimatedMinutes : 45;
+
+        // Determine non-overlapping start and end times
+        let startMs: number;
+        if (item.scheduledStart) {
+          const parsedStart = new Date(item.scheduledStart).getTime();
+          // If proposed start is ahead of lastEndMs, use it; otherwise auto-sequence after previous task + 15m buffer
+          if (!isNaN(parsedStart) && parsedStart >= lastEndMs) {
+            startMs = parsedStart;
+          } else {
+            startMs = lastEndMs + (i === 0 ? 0 : 15 * 60000);
+          }
+        } else {
+          startMs = lastEndMs + (i === 0 ? 0 : 15 * 60000);
+        }
+
+        const endMs = startMs + durationMinutes * 60000;
+        lastEndMs = endMs;
+
+        const scheduledStart = new Date(startMs).toISOString();
+        const scheduledEnd = new Date(endMs).toISOString();
+
         const created = await taskService.createTask({
           title: item.title,
           description: item.description,
           listId,
           priority: (item.priority as Priority) || 'medium',
           starred: item.starred,
-          estimatedMinutes: item.estimatedMinutes || 30,
-          scheduledStart: item.scheduledStart || new Date().toISOString(),
-          scheduledEnd: item.scheduledEnd,
+          estimatedMinutes: durationMinutes,
+          scheduledStart,
+          scheduledEnd,
           expiresAt: item.expiresAt,
+          recurrence: item.recurringRule
+            ? { enabled: true, rule: item.recurringRule, timezone: 'Asia/Kolkata' }
+            : { enabled: false, rule: null as any, timezone: 'Asia/Kolkata' },
           subtasks: item.subtasks ? item.subtasks.map((stTitle) => ({ _id: `st_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, title: stTitle, completed: false })) : [],
         });
-        createdList.push({ id: created._id, title: created.title, category: item.listTitle || item.listId, starred: created.starred });
+
+        createdList.push({
+          id: created._id,
+          title: created.title,
+          category: item.listTitle || item.listId,
+          priority: created.priority,
+          scheduledStart,
+          scheduledEnd,
+          estimatedMinutes: durationMinutes,
+        });
       }
 
       return JSON.stringify({
         success: true,
         count: createdList.length,
-        message: `Successfully batch created ${createdList.length} task(s).`,
+        message: `Successfully batch created ${createdList.length} task(s) with zero time overlaps and 15-minute buffers.`,
         tasks: createdList,
       });
     },
     {
       name: 'batch_create_tasks',
-      description: 'Create multiple tasks at once in a single bulk operation.',
+      description: 'Create multiple tasks at once in a single bulk operation. By default tasks MUST NOT repeat/recur unless explicitly requested by the user.',
       schema: z.object({
         tasks: z.array(
           z.object({
@@ -173,6 +215,7 @@ export function createLangChainTools(taskService?: TaskService) {
             scheduledStart: z.string().optional(),
             scheduledEnd: z.string().optional(),
             expiresAt: z.string().optional(),
+            recurringRule: z.string().optional().describe('ONLY provide this if the user EXPLICITLY requested a repeating or recurring task. Leave undefined for normal tasks.'),
             subtasks: z.array(z.string()).optional().describe('List of subtask titles'),
           })
         ),
@@ -498,7 +541,7 @@ export function createLangChainTools(taskService?: TaskService) {
         title: z.string().describe('Title of the autonomous self-alarm/follow-up'),
         delayMinutes: z.number().optional().describe('Minutes in the future to trigger alarm'),
         scheduledIsoTime: z.string().optional().describe('Exact ISO timestamp to trigger alarm'),
-        actionType: z.enum(['autonomous_followup', 'replan_day', 'check_pending_tasks', 'delete_list_and_tasks']).optional().default('autonomous_followup'),
+        actionType: z.enum(['autonomous_followup', 'check_pending_tasks', 'delete_list_and_tasks']).optional().default('autonomous_followup'),
         notes: z.string().optional().describe('Notes/context for the AI when alarm fires'),
       }),
     }
@@ -685,37 +728,6 @@ export function createLangChainTools(taskService?: TaskService) {
     }
   );
 
-  const replanDayTool = tool(
-    async ({ fixedEvents }) => {
-      if (!taskService) return 'Task service unavailable.';
-      const currentTasks = await taskService.getAllTasks();
-      const events = fixedEvents || [{ title: 'Lectures', startHour: 9, endHour: 16 }];
-      const { tasks: replanned, schedule } = automaticReplanner.replanFromCurrentTime(currentTasks, events);
-
-      for (const t of replanned) {
-        if (t._id) {
-          await taskService.updateTask(t._id, {
-            scheduledStart: t.scheduledStart,
-            scheduledEnd: t.scheduledEnd,
-          });
-        }
-      }
-
-      return JSON.stringify({
-        success: true,
-        replannedCount: replanned.length,
-        message: `Successfully replanned ${replanned.length} tasks starting from current time.`,
-      });
-    },
-    {
-      name: 'replan_day',
-      description: 'Automatically recalculate and replan today schedule for all pending tasks.',
-      schema: z.object({
-        fixedEvents: z.array(z.object({ title: z.string(), startHour: z.number(), endHour: z.number() })).optional(),
-      }),
-    }
-  );
-
   const createAgentGoalTool = tool(
     async ({ title, actionType, targetExecutionTime, listTitle }) => {
       let targetTime = targetExecutionTime;
@@ -806,7 +818,6 @@ export function createLangChainTools(taskService?: TaskService) {
     createListTool,
     deleteListTool,
     deleteAllListsTool,
-    replanDayTool,
     createAgentGoalTool,
     getActiveAiGoalsTool,
     cancelAiAgentGoalTool,

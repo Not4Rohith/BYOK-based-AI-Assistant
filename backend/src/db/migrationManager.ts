@@ -182,11 +182,12 @@ export class MigrationManager {
           profile: { name: 'Rohith N R', timezone: 'Asia/Kolkata' },
           aiInstructions: { systemPrompt: 'Always be decisive, give single best option, and execute tools.' },
           planningPreferences: {
-            preferredStartTime: '09:00',
-            preferredEndTime: '22:00',
+            preferredStartTime: '07:30',
+            preferredEndTime: '23:59',
             defaultBufferMinutes: 15,
             preferRealisticSchedules: true,
-            maxContinuousWorkMinutes: 120,
+            maxContinuousWorkMinutes: 90,
+            fixedRoutines: [],
           },
         }).catch(() => {});
       }

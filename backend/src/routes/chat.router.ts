@@ -47,27 +47,35 @@ export function createChatRouter(aiService: AIService): Router {
   });
 
   router.post('/', async (req: Request, res: Response) => {
-    const { message, prompt, sessionId, localTime, openrouterApiKey } = req.body;
-    const userPrompt = message || prompt;
-    if (!userPrompt || typeof userPrompt !== 'string') {
-      return res.status(400).json({ success: false, error: 'Message text is required' });
-    }
-
-    if (openrouterApiKey && typeof openrouterApiKey === 'string' && openrouterApiKey.trim().length > 0) {
-      const currentConf = aiService.getConfig();
-      if (!currentConf.openrouter?.apiKey || currentConf.openrouter.apiKey.trim() !== openrouterApiKey.trim()) {
-        aiService.updateConfig({
-          ...currentConf,
-          openrouter: {
-            ...currentConf.openrouter,
-            apiKey: openrouterApiKey.trim(),
-          },
-        });
+    try {
+      const { message, prompt, sessionId, localTime, openrouterApiKey } = req.body;
+      const userPrompt = message || prompt;
+      if (!userPrompt || typeof userPrompt !== 'string') {
+        return res.status(400).json({ success: false, error: 'Message text is required' });
       }
-    }
 
-    const result = await aiService.processMessage(userPrompt, sessionId, localTime);
-    res.json({ success: true, data: result });
+      if (openrouterApiKey && typeof openrouterApiKey === 'string' && openrouterApiKey.trim().length > 0) {
+        const currentConf = aiService.getConfig();
+        if (!currentConf.openrouter?.apiKey || currentConf.openrouter.apiKey.trim() !== openrouterApiKey.trim()) {
+          aiService.updateConfig({
+            ...currentConf,
+            openrouter: {
+              ...currentConf.openrouter,
+              apiKey: openrouterApiKey.trim(),
+            },
+          });
+        }
+      }
+
+      const result = await aiService.processMessage(userPrompt, sessionId, localTime);
+      return res.json({ success: true, data: result });
+    } catch (err) {
+      console.error('[ChatRouter] Exception caught in chat endpoint:', err);
+      return res.status(500).json({
+        success: false,
+        error: (err as Error).message || 'An error occurred while processing your message.',
+      });
+    }
   });
 
   return router;

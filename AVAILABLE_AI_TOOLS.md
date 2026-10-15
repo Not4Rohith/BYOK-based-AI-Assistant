@@ -2,6 +2,9 @@
 
 This document outlines all autonomous functions and tool calls available to the AI Assistant for managing tasks, categories, schedules, memory, and background goals.
 
+> **Note on Day Planning & Scheduling**: 
+> Day planning is handled **directly by the LLM reasoning agent** rather than a rigid hardcoded function (`replan_day` is decommissioned). When the user asks the assistant to plan, organize, or replan their day, the router provisions intelligent planning modules (`scheduling`, `prioritization`, `taskCreation`, `taskMutation`) and supplies the LLM with `get_today_agenda`, `get_tasks`, `update_task`, `bulk_update_tasks`, and `batch_create_tasks`. The LLM dynamically constructs an optimal schedule tailored to the user's preferences, calendar commitments, and priorities.
+
 ---
 
 ## 📋 Task Viewing & Query Tools
@@ -22,7 +25,7 @@ This document outlines all autonomous functions and tool calls available to the 
 * **Parameters**: `query` (optional), `status` (optional), `priority` (optional), `listTitle` (optional), `tag` (optional)
 
 ### 3. `get_today_agenda`
-* **Purpose**: Computes and fetches today's full agenda and timeline.
+* **Purpose**: Computes and fetches today's full agenda, schedule time-blocks, and timeline.
 * **Key Functionality**:
   * Summarizes total tasks scheduled for today, total pending count, and completed count.
   * Outputs a structured timeline of scheduled time blocks and estimated durations.
@@ -114,26 +117,26 @@ This document outlines all autonomous functions and tool calls available to the 
 
 ---
 
-## 🗓️ Adaptive Planning Tools
+## 🤖 Autonomous Background Goal & Automation Tools
 
-### 18. `replan_day`
-* **Purpose**: Recalculates and optimizes the user's daily schedule from the current timestamp.
-* **Key Functionality**: Dynamically fits uncompleted tasks around fixed event blocks and updates `scheduledStart` / `scheduledEnd` in MongoDB.
-* **Parameters**: `fixedEvents` (optional array of `{ title, startHour, endHour }`)
-
----
-
-## 🤖 Autonomous Background Goal Tools
-
-### 19. `create_ai_agent_goal`
+### 18. `create_ai_agent_goal`
 * **Purpose**: Registers an autonomous background goal for the server to execute on a scheduled timer.
-* **Key Functionality**: Schedules server-side background actions (e.g. `delete_list_and_tasks`, `check_in_reminder`). Supports passing `listTitle` payload so target category is precisely matched.
+* **Key Functionality**: Schedules server-side background actions (e.g. `delete_list_and_tasks`, `check_pending_tasks`). Supports passing `listTitle` payload so target category is precisely matched.
 * **Parameters**: `title`, `actionType`, `targetExecutionTime`, `listTitle`
 
-### 20. `get_active_ai_goals`
+### 19. `get_active_ai_goals`
 * **Purpose**: Retrieves all pending background autonomous AI goals currently scheduled in the system.
 * **Parameters**: None
 
-### 21. `cancel_ai_agent_goal`
+### 20. `cancel_ai_agent_goal`
 * **Purpose**: Cancels a pending autonomous AI background goal by ID.
 * **Parameters**: `goalId`
+
+### 21. `schedule_self_alarm`
+* **Purpose**: Schedules an autonomous self-invoking alarm for the AI assistant to trigger itself at a future time.
+* **Key Functionality**: Re-evaluates tasks, checks progress, or executes scheduled actions.
+* **Parameters**: `title`, `delayMinutes`, `scheduledIsoTime`, `actionType`, `notes`
+
+### 22. `read_scratchpad`
+* **Purpose**: Reads transient conversation scratchpad memories and multi-turn notes stored in memory.
+* **Parameters**: None

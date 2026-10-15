@@ -12,7 +12,7 @@ const TaskListSchema: Schema = new Schema(
     title: { type: String, required: true },
     icon: { type: String, default: null },
     color: { type: String, default: null },
-    expiresAt: { type: Date, default: null, index: true },
+    expiresAt: { type: Date, default: null },
   },
   {
     timestamps: true,

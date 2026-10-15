@@ -1,78 +1,88 @@
-import { PromptModuleKey, ContextCategory } from '../ai/router/routing.types.js';
-
-export interface PendingActionState {
-  operation: string;
-  tools: string[];
-  parameters?: Record<string, any>;
-  promptModules?: PromptModuleKey[];
-  context?: ContextCategory[];
-  reason?: string;
+export interface ActiveScratchpadMemory {
+  lastUserPrompt?: string;
+  lastAssistantResponse?: string;
+  activeIntent?: string;
+  compressedSummary?: string;
+  lastLayaDecision?: any;
+  updatedAt: number;
 }
 
-export interface TransientScratchpadState {
-  pendingAction?: PendingActionState;
-  scratchpadData?: Record<string, any>;
-  createdAt: number;
-}
-
-export class TransientScratchpadService {
-  private store: Map<string, TransientScratchpadState> = new Map();
+export class CompressedScratchpadService {
+  private store: Map<string, ActiveScratchpadMemory> = new Map();
 
   /**
-   * Store a transient pending action for a session.
+   * Compress multi-turn context into a 2-line token-efficient memory (~30 tokens)
    */
-  public setPendingAction(sessionId: string, action: PendingActionState): void {
+  public updateScratchpad(
+    sessionId: string,
+    userPrompt: string,
+    assistantResponse: string,
+    activeIntent?: string
+  ): void {
     const key = sessionId || 'default';
+    const summary = this.generateSummary(userPrompt, assistantResponse, activeIntent);
     this.store.set(key, {
-      pendingAction: action,
-      createdAt: Date.now(),
+      lastUserPrompt: userPrompt,
+      lastAssistantResponse: assistantResponse,
+      activeIntent,
+      compressedSummary: summary,
+      updatedAt: Date.now(),
     });
-    console.log(`[ScratchpadService] 📝 Set pending action for session "${key}":`, action.operation);
+    console.log(`[ScratchpadService] 📝 Updated compressed scratchpad for session "${key}":\n${summary}`);
   }
 
   /**
-   * Peek at the pending action without flushing.
+   * Retrieve token-efficient compressed scratchpad summary for prompt context
    */
-  public getPendingAction(sessionId?: string): PendingActionState | null {
+  public getScratchpadSummary(sessionId?: string): string {
     const key = sessionId || 'default';
-    let state = this.store.get(key);
-    if (!state && this.store.size > 0) {
-      state = Array.from(this.store.values())[0];
+    let mem = this.store.get(key);
+    if (!mem && this.store.size > 0) {
+      mem = Array.from(this.store.values())[0];
     }
-    if (!state || !state.pendingAction) return null;
-    return state.pendingAction;
+    return mem?.compressedSummary || '';
   }
 
-  /**
-   * One-time read: Retrieves and atomicaly flushes the pending action.
-   */
-  public consumePendingAction(sessionId?: string): PendingActionState | null {
+  public getPendingAction(sessionId?: string): string | null {
     const key = sessionId || 'default';
-    let stateKey = key;
-    let state = this.store.get(key);
-    if (!state && this.store.size > 0) {
-      const firstEntry = Array.from(this.store.entries())[0];
-      if (firstEntry) {
-        stateKey = firstEntry[0];
-        state = firstEntry[1];
-      }
-    }
-    if (!state || !state.pendingAction) return null;
-
-    const action = state.pendingAction;
-    this.store.delete(stateKey);
-    console.log(`[ScratchpadService] 🧹 Consumed & flushed pending action for session "${stateKey}":`, action.operation);
-    return action;
+    const mem = this.store.get(key);
+    return mem?.activeIntent || null;
   }
 
-  /**
-   * Clear all scratchpad data for a session.
-   */
-  public clear(sessionId: string): void {
+  public setLastLayaDecision(sessionId: string, decision: any): void {
+    const key = sessionId || 'default';
+    const existing = this.store.get(key) || { updatedAt: Date.now() };
+    this.store.set(key, { ...existing, lastLayaDecision: decision, updatedAt: Date.now() });
+  }
+
+  public getLastLayaDecision(sessionId?: string): any | null {
+    const key = sessionId || 'default';
+    const mem = this.store.get(key);
+    return mem?.lastLayaDecision || null;
+  }
+
+  private generateSummary(userPrompt: string, assistantResponse: string, activeIntent?: string): string {
+    const lines: string[] = [];
+    if (activeIntent && activeIntent !== 'none') {
+      lines.push(`[Active Intent Memory]: ${activeIntent}`);
+    }
+    if (assistantResponse) {
+      const isQuestion = assistantResponse.includes('?') || assistantResponse.includes('confirm') || assistantResponse.includes('Reply');
+      const cleanResp = assistantResponse.split('\n')[0].substring(0, 120);
+      lines.push(`[Prior Assistant Action]: ${cleanResp}${isQuestion ? ' (Awaiting user confirmation/response)' : ''}`);
+    }
+    if (userPrompt) {
+      lines.push(`[Prior User Input]: ${userPrompt.substring(0, 80)}`);
+    }
+    return lines.join('\n');
+  }
+
+  public clear(sessionId?: string): void {
     const key = sessionId || 'default';
     this.store.delete(key);
     console.log(`[ScratchpadService] 🗑️ Cleared scratchpad for session "${key}"`);
   }
 }
 
-export const transientScratchpadService = new TransientScratchpadService();
+export const compressedScratchpadService = new CompressedScratchpadService();
+export const transientScratchpadService = compressedScratchpadService;

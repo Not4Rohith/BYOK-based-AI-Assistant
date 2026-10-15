@@ -5,7 +5,7 @@ import { ChatMessage, AIProviderConfig } from '@ai-task-manager/shared-types';
 import { memoryExtractor } from './memoryExtractor.js';
 import { TaskService } from './task.service.js';
 import { MemoryService } from './memory.service.js';
-import { PlanningService } from './planning.service.js';
+import { GoalService } from './goal.service.js';
 import { dbConnection } from '../db/connection.js';
 import { chatStorageService } from './chatStorage.service.js';
 import { langGraphAgentEngine } from '../ai/langgraph.agent.js';
@@ -13,6 +13,9 @@ import { layaRouter } from '../ai/router/laya.router.js';
 import { contextSelector } from '../ai/context/selector.js';
 import { composeSystemPrompt, composeSystemPromptAsync } from '../ai/prompts/composer.js';
 import { LayaTelemetryMetrics } from '../ai/router/routing.types.js';
+import { compressedScratchpadService, transientScratchpadService } from './scratchpad.service.js';
+import { UserModel } from '../db/models/User.model.js';
+import { parseScheduleToRoutines } from './scheduleParser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,7 +51,7 @@ export class AIService {
   constructor(
     private taskService?: TaskService,
     private memoryService?: MemoryService,
-    private planningService?: PlanningService
+    private goalService?: GoalService
   ) {
     this.loadConfig();
   }
@@ -101,6 +104,22 @@ export class AIService {
   public updateConfig(newConfig: AIProviderConfig): AIProviderConfig {
     this.config = { ...this.config, ...newConfig };
     this.saveConfig();
+
+    if (dbConnection.getStatus().connected) {
+      const routines = parseScheduleToRoutines(newConfig.dailySchedule || '');
+      UserModel.findOne({}).then((user) => {
+        if (user) {
+          if (newConfig.systemPrompt !== undefined) {
+            user.aiInstructions.systemPrompt = newConfig.systemPrompt;
+          }
+          if (routines.length > 0) {
+            user.planningPreferences.fixedRoutines = routines as any;
+          }
+          user.save().catch((err) => console.warn('[AIService] Failed to update user preferences in DB:', err));
+        }
+      }).catch((err) => console.warn('[AIService] Failed to query user document:', err));
+    }
+
     if (newConfig.mongoUri) {
       dbConnection.connect(newConfig.mongoUri).then((connected) => {
         if (connected) {
@@ -124,7 +143,8 @@ export class AIService {
   public async processMessage(
     userPrompt: string,
     targetSessionId?: string,
-    localTime?: string
+    localTime?: string,
+    userId?: string
   ): Promise<{ userMsg: ChatMessage; aiMsg: ChatMessage }> {
     const activeSession = targetSessionId
       ? { _id: targetSessionId, date: targetSessionId.replace('session_', '') }
@@ -173,16 +193,34 @@ export class AIService {
     // 4. Laya Decision Router Layer
     try {
       console.log('[AIService] 🧭 Routing prompt via Laya Router...');
+      const geminiKey = (this.config.gemini?.apiKey || '').trim();
+      const openrouterKey = (this.config.openrouter?.apiKey || '').trim();
+      const grokKey = (this.config.grok?.apiKey || '').trim();
+
+      // Determine model and key for Laya Router classification layer:
+      const preferredProv = (this.config.activeProvider as 'openrouter' | 'gemini' | 'grok') || (geminiKey ? 'gemini' : openrouterKey ? 'openrouter' : 'grok');
+      let layaProvider: 'openrouter' | 'gemini' | 'grok' = preferredProv;
+
+      if (layaProvider === 'gemini' && (!geminiKey || this.config.gemini?.enabled === false)) {
+        layaProvider = openrouterKey && this.config.openrouter?.enabled !== false ? 'openrouter' : grokKey && this.config.grok?.enabled !== false ? 'grok' : 'gemini';
+      } else if (layaProvider === 'openrouter' && (!openrouterKey || this.config.openrouter?.enabled === false)) {
+        layaProvider = geminiKey && this.config.gemini?.enabled !== false ? 'gemini' : grokKey && this.config.grok?.enabled !== false ? 'grok' : 'openrouter';
+      } else if (layaProvider === 'grok' && (!grokKey || this.config.grok?.enabled === false)) {
+        layaProvider = geminiKey && this.config.gemini?.enabled !== false ? 'gemini' : openrouterKey && this.config.openrouter?.enabled !== false ? 'openrouter' : 'grok';
+      }
+
       const decision = await layaRouter.route(userPrompt, {
         systemPrompt: this.config.systemPrompt,
         dailySchedule: this.config.dailySchedule,
         localTime,
-        openrouterApiKey: this.config.openrouter?.apiKey,
-        defaultModel: this.config.openrouter?.defaultModel,
+        openrouterApiKey: openrouterKey,
+        geminiApiKey: geminiKey,
+        grokApiKey: grokKey,
+        activeProvider: layaProvider,
         sessionId: activeSession._id,
       });
 
-
+      transientScratchpadService.setLastLayaDecision(activeSession._id, decision);
 
       const telemetry: LayaTelemetryMetrics = {
         route: decision.route,
@@ -197,171 +235,55 @@ export class AIService {
         latencyMs: 0,
       };
 
-      // ROUTE 1 — SINGLE_TOOL & AGENT (AI execution with selected tools via LangGraph engine)
-      if (decision.route === 'SINGLE_TOOL' || decision.route === 'AGENT') {
-        console.log(`[AIService] 🛠️ Route ${decision.route} selected (Operation=${decision.operation || 'none'}, Tools=[${decision.tools.join(', ')}]). Executing AI tool runner...`);
+      // UNIFIED AGENT EXECUTION: Pass prompt through LangGraph Agent Engine with Laya precision tools enabled
+      console.log(`[AIService] 🛠️ Processing prompt via LangGraph Agent Engine (Route=${decision.route}, Operation=${decision.operation || 'none'}, PrecisionTools=[${(decision.tools || []).join(', ')}]).`);
 
-        let effectivePrompt = userPrompt;
-        if (
-          decision.reason?.includes('Confirmed pending scratchpad action') ||
-          (decision.operation === 'delete_all_tasks' && /^(yes|yeah|yep|sure|confirm|ok|okay|do it)[\s!?.]*$/i.test(userPrompt.trim()))
-        ) {
-          effectivePrompt = `[USER CONFIRMED ACTION]: The user explicitly replied "${userPrompt}" to confirm executing the operation: ${decision.operation || 'delete_all_tasks'}. Immediately call the tool ${decision.tools.join(', ')} now to perform this action and report the final result to the user.`;
-        }
-
-        const agentResult = await langGraphAgentEngine.processMessage(
-          effectivePrompt,
-          chatHistory,
-          this.config,
-          this.taskService,
-          localTime,
-          decision.tools,
-          decision.promptModules,
-          decision.context
-        );
-        responseText = agentResult.responseText;
-        toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
-
-        // Fail-safe execution for delete_all_tasks if LLM did not invoke delete_all_tasks tool
-        if (decision.operation === 'delete_all_tasks' && toolCalls.length === 0 && this.taskService) {
-          console.warn('[AIService] ⚠️ LLM did not invoke delete_all_tasks tool automatically. Triggering direct execution fallback...');
-          const deletedCount = await this.taskService.deleteAllTasks();
-          toolCalls.push({
-            tool: 'delete_all_tasks',
-            args: {},
-            status: 'success',
-          });
-          responseText = `All ${deletedCount} tasks have been permanently deleted from your task board as confirmed.`;
-        }
-
-        telemetry.latencyMs = Date.now() - startTime;
-        agentMetadata = {
-          ...(agentResult.metadata || {}),
-          layaDecision: decision,
-          telemetry,
-        };
-      }
-
-      // ROUTE 2 — SIMPLE_LLM (Conversational single LLM call with 0 tools)
-      else if (decision.route === 'SIMPLE_LLM') {
-        console.log(`[AIService] 🧠 Route SIMPLE_LLM selected (Modules=[${decision.promptModules.join(', ')}])...`);
-        telemetry.llmCalls = 1;
-
-        const openrouterKey = (this.config.openrouter?.apiKey || '').trim();
-        const timeContext = localTime || new Date().toLocaleString();
-
-        const systemPromptText = await composeSystemPromptAsync(decision.promptModules, {
-          systemPrompt: this.config.systemPrompt,
-          dailySchedule: this.config.dailySchedule,
-          timeContext,
-          userQuery: userPrompt,
-        });
-
-        const loadedContext = await contextSelector.loadContext(decision.context, {
-          taskService: this.taskService,
-          memoryService: this.memoryService,
-          dailySchedule: this.config.dailySchedule,
-          chatHistory: decision.history ? chatHistory : [],
-          localTime,
-        });
-
-        let contextSummary = '';
-        if (loadedContext.tasks && loadedContext.tasks.length > 0) {
-          contextSummary += `\nTasks Context: ${JSON.stringify(loadedContext.tasks.slice(0, 10).map((t) => ({ id: t._id, title: t.title, status: t.status, priority: t.priority })))}`;
-        }
-        if (loadedContext.agenda && loadedContext.agenda.length > 0) {
-          contextSummary += `\nToday Agenda Context: ${JSON.stringify(loadedContext.agenda.map((t) => t.title))}`;
-        }
-        if (loadedContext.memories && loadedContext.memories.length > 0) {
-          contextSummary += `\nUser Memory Context: ${JSON.stringify(loadedContext.memories.slice(0, 5).map((m) => m.content))}`;
-        }
-
-        if (decision.requiresClarification || (decision.reason && decision.reason.includes('confirmation'))) {
-          contextSummary += `\n\n[SYSTEM NOTICE]: The user is attempting a high-risk operation (${decision.operation || 'bulk deletion'}). You must ask the user for confirmation. Ask clearly: "Are you sure you want to delete ALL tasks from your board? Reply with 'yes' to confirm or 'no' to cancel." Do NOT state that tools are missing or unavailable.`;
-        }
-
-        const candidateModels = [this.config.openrouter?.defaultModel, ...(this.config.openrouter?.fallbackModels || [])].filter(Boolean);
-        const modelToUse = candidateModels[0] || 'google/gemini-2.5-flash';
-
-        if (openrouterKey) {
-          const payloadMessages = [
-            { role: 'system', content: `${systemPromptText}${contextSummary}` },
-            ...(decision.history ? chatHistory.slice(-2).map((m) => ({ role: m.role, content: m.content })) : []),
-            { role: 'user', content: userPrompt },
-          ];
-
-          const openrouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${openrouterKey}`,
-              'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://aitaskmanager.app',
-              'X-Title': 'Personal AI Task Manager',
-            },
-            body: JSON.stringify({
-              model: modelToUse,
-              messages: payloadMessages,
-              temperature: 0.7,
-              max_tokens: 4096,
-            }),
-          });
-
-          if (openrouterRes.ok) {
-            const data = await openrouterRes.json();
-            responseText = data.choices?.[0]?.message?.content || 'Completed your request.';
-            const usage = data.usage || {};
-            telemetry.llmTokens = {
-              promptTokens: usage.prompt_tokens || 0,
-              completionTokens: usage.completion_tokens || 0,
-              totalTokens: usage.total_tokens || 0,
-            };
-            telemetry.latencyMs = Date.now() - startTime;
-            agentMetadata = {
-              model: modelToUse,
-              provider: 'openrouter',
-              tokenUsage: telemetry.llmTokens,
-              layaDecision: decision,
-              telemetry,
-            };
-          } else {
-            const agentResult = await langGraphAgentEngine.processMessage(
-              userPrompt,
-              chatHistory,
-              this.config,
-              this.taskService,
-              localTime,
-              []
-            );
-            responseText = agentResult.responseText;
-            toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
-            agentMetadata = agentResult.metadata || {};
-          }
-        } else {
-          const agentResult = await langGraphAgentEngine.processMessage(
-            userPrompt,
-            chatHistory,
-            this.config,
-            this.taskService,
-            localTime,
-            []
-          );
-          responseText = agentResult.responseText;
-          toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
-          agentMetadata = agentResult.metadata || {};
-        }
-      }
-    } catch (err) {
-      console.warn('[AIService] Laya routing execution failed, executing safe fallback agent:', err);
       const agentResult = await langGraphAgentEngine.processMessage(
         userPrompt,
         chatHistory,
         this.config,
         this.taskService,
-        localTime
+        this.memoryService,
+        this.goalService,
+        localTime,
+        decision.tools, // Precision selected tools from Laya Router for maximum token efficiency
+        decision.promptModules,
+        decision.context,
+        userId
       );
       responseText = agentResult.responseText;
       toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
-      agentMetadata = agentResult.metadata || {};
+
+      telemetry.latencyMs = Date.now() - startTime;
+      agentMetadata = {
+        ...(agentResult.metadata || {}),
+        layaDecision: decision,
+        telemetry,
+      };
+    } catch (err) {
+      console.warn('[AIService] Laya routing execution failed, executing safe fallback agent:', err);
+      try {
+        const agentResult = await langGraphAgentEngine.processMessage(
+          userPrompt,
+          chatHistory,
+          this.config,
+          this.taskService,
+          this.memoryService,
+          this.goalService,
+          localTime,
+          undefined,
+          undefined,
+          undefined,
+          userId
+        );
+        responseText = agentResult.responseText;
+        toolCalls = [...toolCalls, ...agentResult.toolCallsExecuted];
+        agentMetadata = agentResult.metadata || {};
+      } catch (finalErr) {
+        console.error('[AIService] All candidate models and safe fallback agent failed:', finalErr);
+        responseText = `[AI Provider Notice]: All configured AI models encountered errors (${(finalErr as Error).message || finalErr}). Please verify your OpenRouter, Grok, or Gemini API keys in Settings.`;
+        agentMetadata = { provider: 'local_fallback', error: String(finalErr) };
+      }
     }
 
     if (!responseText || responseText.trim() === '') {
@@ -384,6 +306,12 @@ export class AIService {
     });
 
     this.messages.push(aiMsg);
+    compressedScratchpadService.updateScratchpad(
+      activeSession._id,
+      userPrompt,
+      responseText,
+      agentMetadata?.layaDecision?.operation || agentMetadata?.layaDecision?.route
+    );
     return { userMsg, aiMsg };
   }
 }

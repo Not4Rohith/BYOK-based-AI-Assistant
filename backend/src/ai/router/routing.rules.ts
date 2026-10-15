@@ -7,8 +7,8 @@ export class LayaRuleEngine {
     const cleanPrompt = p.replace(/[.!?]+$/, '').trim();
     const lower = cleanPrompt.toLowerCase();
 
-    // 1. Ultra-fast path for pure 1-word greetings & casual chat (< 1ms, 0 API cost)
-    if (/^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you)[\s!?.]*$/i.test(p)) {
+    // Fast 1ms path for greetings & casual smalltalk
+    if (/^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening)|howdy|sup|who\s+are\s+you|what\s+can\s+you\s+do|thanks|thank\s+you)(\s+(there|everyone|all|friend))?[\s!?.]*$/i.test(p)) {
       return {
         route: 'SIMPLE_LLM',
         confidence: 0.95,
@@ -24,40 +24,26 @@ export class LayaRuleEngine {
       };
     }
 
-    // 2. High-risk bulk deletion scratchpad staging
-    const isBulkDelete =
-      /^(?:please\s+)?(?:can\s+you\s+)?(?:delete|remove|clear|erase|purge|drop)\s+(?:all\s+)?(?:my\s+)?tasks$/i.test(cleanPrompt) ||
-      /^(?:delete|clear|remove|erase|purge|drop)\s+(?:all|everything|all\s+tasks|all\s+my\s+tasks|all\s+of\s+my\s+tasks)$/i.test(cleanPrompt) ||
-      lower === 'delete all tasks' ||
-      lower === 'clear all tasks' ||
-      lower === 'delete all' ||
-      lower === 'delete everything';
-
-    if (isBulkDelete) {
-      transientScratchpadService.setPendingAction(sessionId || 'default', {
-        operation: 'delete_all_tasks',
-        tools: ['delete_all_tasks'],
-        promptModules: ['taskDeletion'],
-        context: ['TASKS'],
-      });
-
+    // Direct inquiries about user routine, bedtime, wake-up, habits, or schedule preferences
+    if (
+      /^(what('?s| is) my (usual |typical )?(bed\s*time|sleep(ing)?\s*time|wake\s*up\s*time|daily routine|routine|schedule)|when do i (usually |typically )?(sleep|go to bed|wake up)|tell me (about )?my (routine|schedule|bedtime))/i.test(cleanPrompt)
+    ) {
       return {
         route: 'SIMPLE_LLM',
-        operation: 'delete_all_tasks',
         confidence: 0.98,
         reasoningLevel: 'NONE',
-        promptModules: ['taskDeletion'],
+        promptModules: ['base', 'memory'],
         tools: [],
-        context: ['TASKS'],
-        history: false,
-        memory: false,
-        requiresClarification: true,
-        reason: 'Asking for confirmation via transient scratchpad before bulk task deletion',
+        context: ['CURRENT_TIME', 'USER_PREFERENCES', 'PERSONAL_INSTRUCTIONS', 'RELEVANT_MEMORIES'],
+        history: true,
+        memory: true,
+        requiresClarification: false,
+        reason: 'Direct inquiry about user routine, bedtime, or personal preferences',
         parameters: {},
       };
     }
 
-    // Delegate all semantic routing, tool selection, and context requirements to the Fast Router LLM
+    // Delegate all semantic intent analysis and tool selection to Laya Semantic Router LLM
     return null;
   }
 }

@@ -21,6 +21,12 @@ import {
   X,
   Check,
   Loader2,
+  MoreVertical,
+  Trash2,
+  Edit2,
+  ArrowUpDown,
+  CornerDownRight,
+  Calendar,
 } from 'lucide-react';
 
 interface GoogleTasksMobileViewProps {
@@ -78,6 +84,16 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
 
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+
+  // List options & sorting state
+  const [sortBy, setSortBy] = useState<'my_order' | 'date' | 'starred_recently'>('my_order');
+  const [showListMenu, setShowListMenu] = useState(false);
+  const [showRenameListModal, setShowRenameListModal] = useState(false);
+  const [renamingListTitle, setRenamingListTitle] = useState('');
+  const [quickDateTime, setQuickDateTime] = useState<string | null>(null);
+  const [showQuickDatePicker, setShowQuickDatePicker] = useState(false);
+  const [showDeleteListConfirm, setShowDeleteListConfirm] = useState(false);
+  const [showDeleteCompletedConfirm, setShowDeleteCompletedConfirm] = useState(false);
 
   // Daily AI Summary state for bottom taskbar
   const [aiSummary, setAiSummary] = useState<string>('Ask AI anything or manage tasks...');
@@ -190,17 +206,39 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
   const currentList = taskLists.find((l) => l._id === activeListId) || taskLists[0];
   const currentListId = (isStarTab || isAllTasksTab) ? '' : (currentList?._id || '');
 
-  const activeTasks = isStarTab
+  const matchesCurrentList = (t: Task) => {
+    if (t.listId === currentListId) return true;
+    if ((!t.listId || !taskLists.some((tl) => tl._id === t.listId)) && currentListId === taskLists[0]?._id) {
+      return true;
+    }
+    return false;
+  };
+
+  const rawActiveTasks = isStarTab
     ? tasks.filter((t) => t.starred && t.status !== 'completed')
     : isAllTasksTab
       ? tasks.filter((t) => t.status !== 'completed')
-      : tasks.filter((t) => t.listId === currentListId && t.status !== 'completed');
+      : tasks.filter((t) => matchesCurrentList(t) && t.status !== 'completed');
+
+  const activeTasks = [...rawActiveTasks].sort((a, b) => {
+    if (sortBy === 'date') {
+      if (!a.scheduledStart && !b.scheduledStart) return 0;
+      if (!a.scheduledStart) return 1;
+      if (!b.scheduledStart) return -1;
+      return new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime();
+    }
+    if (sortBy === 'starred_recently') {
+      if (a.starred && !b.starred) return -1;
+      if (!a.starred && b.starred) return 1;
+    }
+    return 0; // 'my_order'
+  });
 
   const completedTasks = isStarTab
     ? tasks.filter((t) => t.starred && t.status === 'completed')
     : isAllTasksTab
       ? tasks.filter((t) => t.status === 'completed')
-      : tasks.filter((t) => t.listId === currentListId && t.status === 'completed');
+      : tasks.filter((t) => matchesCurrentList(t) && t.status === 'completed');
 
   const handleSaveQuickTask = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -211,13 +249,14 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
       onAddTask(listTarget, quickTitle.trim());
     }
 
-    if (quickDetails.trim() || quickStarred) {
+    if (quickDetails.trim() || quickStarred || quickDateTime) {
       setTimeout(() => {
         const created = tasks.find((t) => t.title === quickTitle.trim());
         if (created) {
           onUpdateTask(created._id, {
             description: quickDetails.trim() || undefined,
             starred: quickStarred || isStarTab,
+            scheduledStart: quickDateTime || undefined,
           });
         }
       }, 300);
@@ -226,8 +265,30 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
     setQuickTitle('');
     setQuickDetails('');
     setQuickStarred(false);
+    setQuickDateTime(null);
     setShowQuickDetailsInput(false);
     setShowQuickAdd(false);
+  };
+
+  const handleRenameCurrentList = () => {
+    if (!currentList || !renamingListTitle.trim() || isStarTab) return;
+    onRenameList(currentList._id, renamingListTitle.trim());
+    setShowRenameListModal(false);
+    setRenamingListTitle('');
+  };
+
+  const handleDeleteCurrentList = () => {
+    if (!currentList || isStarTab) return;
+    onDeleteList(currentList._id);
+    setShowDeleteListConfirm(false);
+    setActiveListId(taskLists[0]?._id || 'starred');
+  };
+
+  const handleDeleteCompletedTasks = () => {
+    for (const t of completedTasks) {
+      onDeleteTask(t._id);
+    }
+    setShowDeleteCompletedConfirm(false);
   };
 
   const handleCreateNewListSubmit = (e?: React.FormEvent) => {
@@ -412,11 +473,114 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
         {/* Single Rounded Container Card matching 2024 Google Tasks Android Design */}
         <div className="bg-[#1E1B24] rounded-3xl p-4 border border-[#2B2930] shadow-xl min-h-[60vh] flex flex-col justify-between">
           <div className="space-y-1">
-            {/* List Header Title */}
-            <div className="px-2 py-1 mb-2 flex items-center justify-between">
+            {/* List Header Title & Options */}
+            <div className="px-2 py-1 mb-2 flex items-center justify-between relative">
               <h2 className="text-lg font-normal text-[#E6E1E5]">
-                {currentList?.title || 'My Tasks'}
+                {isStarTab ? 'Starred' : isAllTasksTab ? 'All Tasks' : currentList?.title || 'My Tasks'}
               </h2>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowListMenu(!showListMenu)}
+                  className="p-1.5 text-[#CAC4D0] hover:text-[#E6E1E5] rounded-full hover:bg-[#2B2930] transition-colors"
+                  title="List options"
+                >
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+
+                {showListMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowListMenu(false)} />
+                    <div className="absolute right-0 top-9 w-56 bg-[#2B2930] rounded-2xl border border-[#36343B] shadow-2xl z-50 py-2 text-xs animate-in fade-in zoom-in-95 duration-100">
+                      <div className="px-3 py-1.5 text-[11px] font-semibold text-[#CAC4D0] uppercase tracking-wider flex items-center space-x-1.5">
+                        <ArrowUpDown className="w-3.5 h-3.5" />
+                        <span>Sort by</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSortBy('my_order');
+                          setShowListMenu(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#36343B] text-[#E6E1E5]"
+                      >
+                        <span>My order</span>
+                        {sortBy === 'my_order' && <Check className="w-4 h-4 text-[#D0BCFF]" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSortBy('date');
+                          setShowListMenu(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#36343B] text-[#E6E1E5]"
+                      >
+                        <span>Date</span>
+                        {sortBy === 'date' && <Check className="w-4 h-4 text-[#D0BCFF]" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSortBy('starred_recently');
+                          setShowListMenu(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#36343B] text-[#E6E1E5]"
+                      >
+                        <span>Starred recently</span>
+                        {sortBy === 'starred_recently' && <Check className="w-4 h-4 text-[#D0BCFF]" />}
+                      </button>
+
+                      {!isStarTab && !isAllTasksTab && (
+                        <>
+                          <div className="my-1 border-t border-[#36343B]" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowListMenu(false);
+                              setRenamingListTitle(currentList?.title || '');
+                              setShowRenameListModal(true);
+                            }}
+                            className="w-full flex items-center space-x-2 px-3 py-2 text-left hover:bg-[#36343B] text-[#E6E1E5]"
+                          >
+                            <Edit2 className="w-3.5 h-3.5 text-[#CAC4D0]" />
+                            <span>Rename list</span>
+                          </button>
+                          {taskLists.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowListMenu(false);
+                                setShowDeleteListConfirm(true);
+                              }}
+                              className="w-full flex items-center space-x-2 px-3 py-2 text-left hover:bg-[#36343B] text-rose-400"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete list</span>
+                            </button>
+                          )}
+                        </>
+                      )}
+
+                      {completedTasks.length > 0 && (
+                        <>
+                          <div className="my-1 border-t border-[#36343B]" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowListMenu(false);
+                              setShowDeleteCompletedConfirm(true);
+                            }}
+                            className="w-full flex items-center space-x-2 px-3 py-2 text-left hover:bg-[#36343B] text-rose-400"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete all completed tasks</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Active Task Rows or Empty States */}
@@ -471,18 +635,26 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
                     <p className="text-sm font-normal text-[#E6E1E5] truncate">{t.title}</p>
 
                     {/* Secondary Information */}
-                    {(t.description || t.scheduledStart || t.subtasks?.length) && (
+                    {(t.description || t.scheduledStart || (t.subtasks && t.subtasks.length > 0)) && (
                       <div className="flex items-center space-x-2 text-xs text-[#CAC4D0] mt-0.5 truncate">
                         {t.description && (
                           <span className="truncate max-w-[140px] text-[#938F99]">{t.description}</span>
                         )}
                         {t.scheduledStart && (
-                          <span className="text-[#D0BCFF] text-[11px] bg-[#2B2930] px-2 py-0.5 rounded-md border border-[#36343B]">
+                          <span className="text-[#D0BCFF] text-[11px] bg-[#2B2930] px-2 py-0.5 rounded-md border border-[#36343B] shrink-0">
                             {new Date(t.scheduledStart).toLocaleDateString(undefined, {
                               weekday: 'short',
                               month: 'short',
                               day: 'numeric',
                             })}
+                          </span>
+                        )}
+                        {t.subtasks && t.subtasks.length > 0 && (
+                          <span className="text-[#D0BCFF] text-[11px] bg-[#2B2930] px-2 py-0.5 rounded-md border border-[#36343B] flex items-center space-x-1 shrink-0">
+                            <CornerDownRight className="w-3 h-3 text-[#D0BCFF]" />
+                            <span>
+                              {t.subtasks.filter((st) => st.completed).length}/{t.subtasks.length}
+                            </span>
                           </span>
                         )}
                       </div>
@@ -628,6 +800,30 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
               />
             )}
 
+            {/* Selected Date Badge if set */}
+            {quickDateTime && (
+              <div className="flex items-center space-x-2 px-2 py-1">
+                <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-[#36343B] text-[#D0BCFF] text-xs border border-[#49454F]/50">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>
+                    {new Date(quickDateTime).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setQuickDateTime(null)}
+                    className="text-[#CAC4D0] hover:text-[#E6E1E5] p-0.5 ml-1"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Icon Toolbar Row matching Screenshot 3 */}
             <div className="flex items-center justify-between pt-2 border-t border-[#36343B] px-1">
               <div className="flex items-center space-x-2">
@@ -637,17 +833,18 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
                   className={`p-2 rounded-full hover:bg-[#36343B] transition-colors ${
                     showQuickDetailsInput ? 'text-[#D0BCFF]' : 'text-[#CAC4D0]'
                   }`}
+                  title="Add details"
                 >
                   <AlignLeft className="w-5 h-5" />
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => {
-                    const promptText = prompt('Ask AI to auto-schedule or create task details:');
-                    if (promptText) onAskAI(promptText);
-                  }}
-                  className="p-2 text-[#CAC4D0] hover:text-[#D0BCFF] rounded-full hover:bg-[#36343B] transition-colors"
+                  onClick={() => setShowQuickDatePicker(true)}
+                  className={`p-2 rounded-full hover:bg-[#36343B] transition-colors ${
+                    quickDateTime ? 'text-[#D0BCFF]' : 'text-[#CAC4D0] hover:text-[#D0BCFF]'
+                  }`}
+                  title="Set date/time"
                 >
                   <Clock className="w-5 h-5" />
                 </button>
@@ -658,8 +855,21 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
                   className={`p-2 rounded-full hover:bg-[#36343B] transition-colors ${
                     quickStarred ? 'text-[#D0BCFF]' : 'text-[#CAC4D0]'
                   }`}
+                  title="Star task"
                 >
                   <Star className={`w-5 h-5 ${quickStarred ? 'fill-[#D0BCFF]' : ''}`} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const promptText = prompt('Ask AI to assist with this task:');
+                    if (promptText) onAskAI(promptText);
+                  }}
+                  className="p-2 text-[#CAC4D0] hover:text-[#D0BCFF] rounded-full hover:bg-[#36343B] transition-colors"
+                  title="AI Actions"
+                >
+                  <Sparkles className="w-4 h-4 text-purple-400" />
                 </button>
               </div>
 
@@ -673,6 +883,20 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
               </button>
             </div>
           </form>
+
+          {/* Quick Date Popover */}
+          {showQuickDatePicker && (
+            <GoogleDatePopover
+              isOpen={showQuickDatePicker}
+              initialDate={quickDateTime || undefined}
+              position={{ top: 200, left: 20 }}
+              onClose={() => setShowQuickDatePicker(false)}
+              onSave={(dt: string | null) => {
+                setQuickDateTime(dt);
+                setShowQuickDatePicker(false);
+              }}
+            />
+          )}
         </div>
       )}
 
@@ -707,6 +931,95 @@ export const GoogleTasksMobileView: React.FC<GoogleTasksMobileViewProps> = ({
               placeholder="Enter list title"
               className="w-full text-xl font-normal bg-transparent text-[#E6E1E5] focus:outline-none placeholder-[#79747E] py-2 border-b border-[#D0BCFF]"
             />
+          </div>
+        </div>
+      )}
+
+      {/* 8. Rename List Modal */}
+      {showRenameListModal && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#141218] text-[#E6E1E5] font-sans">
+          <div className="flex items-center justify-between px-5 pt-12 pb-4 border-b border-[#2B2930]">
+            <button
+              onClick={() => setShowRenameListModal(false)}
+              className="p-2 text-[#CAC4D0] hover:text-[#E6E1E5] rounded-full hover:bg-[#2B2930] transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <button
+              onClick={handleRenameCurrentList}
+              disabled={!renamingListTitle.trim()}
+              className="text-sm font-semibold text-[#D0BCFF] disabled:text-[#79747E] px-3 py-1 hover:bg-[#2B2930] rounded-full transition-colors"
+            >
+              Done
+            </button>
+          </div>
+
+          <div className="flex-1 p-6">
+            <input
+              type="text"
+              autoFocus
+              value={renamingListTitle}
+              onChange={(e) => setRenamingListTitle(e.target.value)}
+              placeholder="Rename list"
+              className="w-full text-xl font-normal bg-transparent text-[#E6E1E5] focus:outline-none placeholder-[#79747E] py-2 border-b border-[#D0BCFF]"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 9. Delete List Confirmation Dialog */}
+      {showDeleteListConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#2B2930] border border-[#36343B] rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+            <h3 className="text-lg font-semibold text-[#E6E1E5]">Delete list?</h3>
+            <p className="text-sm text-[#CAC4D0] leading-relaxed">
+              All tasks in <span className="font-semibold text-white">"{currentList?.title}"</span> will be permanently deleted.
+            </p>
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteListConfirm(false)}
+                className="px-4 py-2 text-xs font-semibold text-[#CAC4D0] hover:text-white rounded-full hover:bg-[#36343B] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteCurrentList}
+                className="px-4 py-2 text-xs font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-full transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Delete All Completed Tasks Confirmation Dialog */}
+      {showDeleteCompletedConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#2B2930] border border-[#36343B] rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+            <h3 className="text-lg font-semibold text-[#E6E1E5]">Delete all completed tasks?</h3>
+            <p className="text-sm text-[#CAC4D0] leading-relaxed">
+              {completedTasks.length} completed {completedTasks.length === 1 ? 'task' : 'tasks'} will be permanently removed.
+            </p>
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteCompletedConfirm(false)}
+                className="px-4 py-2 text-xs font-semibold text-[#CAC4D0] hover:text-white rounded-full hover:bg-[#36343B] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteCompletedTasks}
+                className="px-4 py-2 text-xs font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-full transition-colors"
+              >
+                Delete all
+              </button>
+            </div>
           </div>
         </div>
       )}

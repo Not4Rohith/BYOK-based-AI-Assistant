@@ -174,12 +174,20 @@ export interface UserAiInstructions {
   systemPrompt: string;
 }
 
+export interface RoutineCommitment {
+  title: string;
+  daysOfWeek: number[]; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  startTime: string; // HH:mm 24h format
+  endTime: string;   // HH:mm 24h format
+}
+
 export interface UserPlanningPreferences {
   preferredStartTime: string;
   preferredEndTime: string;
   defaultBufferMinutes: number;
   preferRealisticSchedules: boolean;
   maxContinuousWorkMinutes: number;
+  fixedRoutines?: RoutineCommitment[];
 }
 
 export interface User {
@@ -202,6 +210,7 @@ export interface AIProviderConfig {
   openrouter: ProviderSetting;
   gemini: ProviderSetting;
   grok: ProviderSetting;
+  activeProvider?: 'openrouter' | 'gemini' | 'grok';
   systemPrompt?: string;
   dailySchedule?: string;
   mongoUri?: string;

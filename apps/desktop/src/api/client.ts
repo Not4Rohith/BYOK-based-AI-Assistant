@@ -5,7 +5,7 @@ export const getApiBaseUrl = (): string => {
   return offlineCache.getServerUrl();
 };
 
-async function fetchJson<T>(url: string, options?: RequestInit, timeoutMs = 10000): Promise<T | null> {
+async function fetchJson<T>(url: string, options?: RequestInit, timeoutMs = 4000): Promise<T | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -22,18 +22,21 @@ async function fetchJson<T>(url: string, options?: RequestInit, timeoutMs = 1000
     if (json.data !== undefined) return json.data as T;
     return json as T;
   } catch (err) {
-    // Android auto-fallback: if target host failed, test candidates (host IP & emulator bridge)
+    // Auto-fallback: if current base failed, probe other host candidates
     const currentBase = getApiBaseUrl();
     const candidates = [
-      'http://10.143.32.161:3001/api',
+      'http://localhost:3001/api',
+      'http://127.0.0.1:3001/api',
       'http://10.0.2.2:3001/api',
+      'http://10.164.151.34:3001/api',
+      'http://10.143.32.161:3001/api',
     ].filter((c) => !url.startsWith(c));
 
     for (const candidateBase of candidates) {
       try {
         const fallbackUrl = url.replace(currentBase, candidateBase);
         const controller2 = new AbortController();
-        const timeoutId2 = setTimeout(() => controller2.abort(), timeoutMs);
+        const timeoutId2 = setTimeout(() => controller2.abort(), 2500);
         const res2 = await fetch(fallbackUrl, {
           headers: { 'Content-Type': 'application/json' },
           signal: controller2.signal,
@@ -378,11 +381,6 @@ export const api = {
       return { userMsg, aiMsg };
     }
   },
-
-replanDay: () =>
-  fetchJson<Task[]>(`${getApiBaseUrl()}/planning/replan`, {
-    method: 'POST',
-  }),
 
   getAIConfig: async (): Promise<AIProviderConfig | null> => {
     const cached = offlineCache.getCachedAIConfig();

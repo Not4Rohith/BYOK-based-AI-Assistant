@@ -222,11 +222,6 @@ export function App() {
     }
   };
 
-  const handleReplan = async () => {
-    const replanned = await api.replanDay();
-    if (replanned) setTasks(replanned);
-  };
-
   const handleAskAI = async (promptText: string, targetSessionId?: string) => {
     const getCurrentLocalTime = () => new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: user.profile?.timezone || 'Asia/Kolkata', timeZoneName: 'short' });
 
@@ -351,6 +346,14 @@ export function App() {
           isConnected={isConnected}
           isCheckingHealth={isCheckingHealth}
           onCheckHealth={handleCheckHealth}
+          onRefresh={async () => {
+            const [serverTasks, serverLists] = await Promise.all([
+              api.getTasks(),
+              api.getTaskLists(),
+            ]);
+            if (serverTasks) setTasks(serverTasks);
+            if (serverLists) setTaskLists(serverLists);
+          }}
         />
       ) : (
         <>
@@ -402,6 +405,7 @@ export function App() {
                 onCreateList={handleCreateList}
                 onDeleteList={handleDeleteList}
                 onRenameList={handleRenameList}
+                onAskAI={handleAskAI}
               />
             </main>
           </div>

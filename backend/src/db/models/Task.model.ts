@@ -46,7 +46,7 @@ const TaskSchema: Schema = new Schema(
     dueAt: { type: String, default: null, index: true },
     scheduledStart: { type: String, default: null, index: true },
     scheduledEnd: { type: String, default: null },
-    expiresAt: { type: Date, default: null, index: true },
+    expiresAt: { type: Date, default: null },
     tags: [{ type: String }],
     source: { type: String, enum: ['user', 'ai', 'routine'], default: 'user' },
     recurrence: { type: RecurrenceSchema, default: {} },

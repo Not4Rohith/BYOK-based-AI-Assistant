@@ -5,13 +5,11 @@ import { TaskService } from './services/task.service.js';
 import { GoalService } from './services/goal.service.js';
 import { MemoryService } from './services/memory.service.js';
 import { AIService } from './services/ai.service.js';
-import { PlanningService } from './services/planning.service.js';
 
 import { createTasksRouter } from './routes/tasks.router.js';
 import { createGoalsRouter } from './routes/goals.router.js';
 import { createMemoryRouter } from './routes/memory.router.js';
 import { createChatRouter } from './routes/chat.router.js';
-import { createPlanningRouter } from './routes/planning.router.js';
 import { createSettingsRouter } from './routes/settings.router.js';
 import { createGoogleRouter } from './routes/google.router.js';
 import { createSyncRouter } from './routes/sync.routes.js';
@@ -22,6 +20,7 @@ import { aiAgentRunner } from './services/aiAgentRunner.js';
 import { SyncConflictResolver } from './services/syncConflictResolver.js';
 import { AnalyticsService } from './services/analytics.service.js';
 import { migrationManager } from './db/migrationManager.js';
+import { layaRouter } from './ai/router/laya.router.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -41,8 +40,7 @@ app.use((req, _res, next) => {
 const taskService = new TaskService();
 const goalService = new GoalService();
 const memoryService = new MemoryService();
-const planningService = new PlanningService();
-const aiService = new AIService(taskService, memoryService, planningService);
+const aiService = new AIService(taskService, memoryService, goalService);
 const syncResolver = new SyncConflictResolver(taskService, goalService, memoryService);
 const analyticsService = new AnalyticsService(taskService, goalService, memoryService);
 
@@ -65,7 +63,10 @@ async function startServer() {
   // 2. Start autonomous background runner for AI agent goals
   aiAgentRunner.startScheduler();
 
-  // 3. Health Check with Database Status
+  // 3. Pre-warm Laya System 1 decision engine asynchronously
+  layaRouter.warmup().catch((err) => console.warn('[Server] Laya warmup notice:', err?.message || String(err)));
+
+  // 4. Health Check with Database Status
   app.get('/api/health', (_req, res) => {
     res.json({
       status: 'ok',
@@ -80,7 +81,6 @@ async function startServer() {
   app.use('/api/goals', createGoalsRouter(goalService));
   app.use('/api/memory', createMemoryRouter(memoryService));
   app.use('/api/chat', createChatRouter(aiService));
-  app.use('/api/planning', createPlanningRouter(planningService, taskService));
   app.use('/api/settings', createSettingsRouter(aiService, taskService, goalService, memoryService));
   app.use('/api/settings/models', modelsRouter);
   app.use('/api/google', createGoogleRouter());
@@ -92,6 +92,15 @@ async function startServer() {
     console.log(`[AI Task Manager Backend] Server running on http://0.0.0.0:${PORT}`);
   });
 }
+
+// Process-level global error handlers to prevent process termination on AI/network errors
+process.on('uncaughtException', (err) => {
+  console.error('[Server] Uncaught Exception caught (backend will remain running):', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Server] Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 startServer();
 

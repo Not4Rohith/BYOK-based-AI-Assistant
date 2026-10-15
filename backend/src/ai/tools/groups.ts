@@ -15,6 +15,6 @@ export const TOOL_GROUPS: Record<ToolGroupKey, string[]> = {
   TASK_DELETE: ['delete_task', 'delete_all_tasks'],
   SUBTASK: ['create_subtask', 'delete_subtask'],
   LIST: ['get_lists', 'create_list', 'delete_list', 'delete_all_lists'],
-  SCHEDULING: ['replan_day'],
+  SCHEDULING: ['get_today_agenda', 'get_tasks', 'update_task', 'bulk_update_tasks', 'batch_create_tasks'],
   AUTONOMOUS_AGENT: ['create_ai_agent_goal', 'get_active_ai_goals', 'cancel_ai_agent_goal'],
 };

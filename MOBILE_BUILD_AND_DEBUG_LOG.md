@@ -56,12 +56,21 @@ This document provides a concise overview of the mobile app build process for **
 - **`backend/src/routes/models.router.ts`**: Clean OpenRouter models endpoint querying `https://openrouter.ai/api/v1/models` with `Authorization: Bearer <apiKey>`.
 - **`apps/desktop/src/api/client.ts`**: Direct OpenRouter API completion fallback, Android `10.0.2.2` loopback fallback, and standalone model discovery.
 - **`apps/desktop/src/App.tsx`**: Removed hardcoded default list fallback (`defaultLists`), ensuring 100% server data fidelity.
-- **`apps/desktop/src/components/GoogleTasksMobileView.tsx`**: Star tab `★`, list count badges `Basic Info (1)`, Material empty state vector illustrations, safe-area top padding (`pt-12`), and touch Pull-to-Refresh gesture handler.
-- **`apps/desktop/src/components/GoogleTaskDetailsMobileScreen.tsx`**: Category switcher dropdown, inline subtask input (`↳ ◯ Enter title`), floating `Mark completed` pill with checkmark icon, and top safe-area padding.
+- **`apps/desktop/src/components/GoogleTasksMobileView.tsx`**:
+  - Star tab `★`, active category tabs with count badges, and touch pull-to-refresh.
+  - List header more options menu (`⋮`) with three-way sorting (*My order*, *Date*, *Starred recently*).
+  - Modal workflows for *Rename list*, *Delete list* confirmation, and *Delete all completed tasks* confirmation.
+  - Subtask completion progress badges (`↳ X/Y`) on task rows.
+  - Quick Add Drawer integrated with `GoogleDatePopover` date/time scheduler and active date chip pill with dismiss (`✕`).
+- **`apps/desktop/src/components/GoogleTaskDetailsMobileScreen.tsx`**:
+  - Category switcher dropdown, inline subtask input (`↳ ◯ Enter title`), floating `Mark completed` pill.
+  - Added **Repeat / Recurrence** row with `GoogleRepeatModal` integration to configure and remove recurring task rules (`FREQ=DAILY`, `FREQ=WEEKLY`, etc.).
+  - Added **Priority** selector pills (*Low*, *Medium*, *High*).
 
 ---
 
 ## 5. Built APK Output Files
 
-- **Root APK File**: [app-debug.apk](file:///home/rohith/Documents/AI%20Task%20Manager/app-debug.apk) (610 MB)
+- **Root APK File**: [app-debug.apk](file:///home/rohith/Documents/AI%20Task%20Manager/app-debug.apk) (610 MB - Freshly Compiled)
 - **Tauri Universal Output**: [app-universal-debug.apk](file:///home/rohith/Documents/AI%20Task%20Manager/apps/desktop/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk)
+- **Tauri Universal Bundle AAB**: [app-universal-debug.aab](file:///home/rohith/Documents/AI%20Task%20Manager/apps/desktop/src-tauri/gen/android/app/build/outputs/bundle/universalDebug/app-universal-debug.aab)
